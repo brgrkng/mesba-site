@@ -71,6 +71,8 @@
   .tour h3 { font-size: 36px; margin: 12px 0 8px; }
   .tour p { margin: 0; color: var(--muted); font-size: 15px; min-height: 4.8em; }
   .tour.swap h3, .tour.swap p, .tour.swap .tour-top span { animation: in .45s ease; }
+  .traffic { margin-top: 10px; color: var(--sun); }
+  .traffic[hidden] { display: none; }
   .tour-nav { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .tour-nav > button { font: inherit; width: 34px; height: 34px; flex: none; cursor: pointer; color: var(--ink);
                        background: none; border: 1px solid var(--line); }
@@ -269,6 +271,7 @@
       <div class="tour-top mono"><span id="t-where"></span><b id="t-num"></b></div>
       <h3 id="t-title"></h3>
       <p id="t-body"></p>
+      <div class="traffic mono" id="t-traffic" hidden></div>
       <div class="tour-nav">
         <button id="t-prev" aria-label="Previous place">←</button>
         <div class="dots" id="t-dots"></div>
@@ -1050,7 +1053,7 @@ const STOPS = [
     body: "A BSc in Computer Science (AI & Data Science) at Taylor's University, on the Dean's List four times. Then an MBA in Business Analytics at APU." },
   { title: 'Hilti Asia IT Services', where: 'Kuala Lumpur · Apr — Dec 2023', lat: 3.14, lon: 101.69, r: .09, countries: ['Malaysia'],
     body: 'Nine months in Finance & Controlling IT, writing ABAP for SAP that shipped to production, and teaching non-ABAP colleagues to debug it.' },
-  { title: 'EPC', where: 'Europe · on air', lat: 50, lon: 30, r: .36, countries: EPC_COUNTRIES, heroes: true,
+  { title: 'EPC', where: 'Europe · on air', lat: 50, lon: 22, r: .36, countries: EPC_COUNTRIES, heroes: true,
     body: "A European Dota 2 tournament with a $20,000 prize pool. I cast it and Metavision runs the camera. This season's 59 players come from 17 countries, from Peru to Kyrgyzstan." },
   { title: 'WellDev', where: 'Next', lat: 47.37, lon: 8.54, r: .1, countries: ['Switzerland'],
     body: 'Software engineering with Swiss roots and a team in Dhaka. The next stop on this map, and I am ready to join.' },
@@ -1086,6 +1089,66 @@ function selectSpot(on) {
   if (!on) tour.next = clock.elapsedTime + DWELL;
   placePill.setAttribute('aria-pressed', String(on));
 }
+// ---- live air traffic in the spotlight close-up: real aircraft from adsb.lol, through a small Cloudflare Worker ----
+// (worker/flights.js). Locally it uses the worker run under Node on :8787.
+const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : '';   // set to the deployed Worker's URL
+const MAX_AC = 400, acPos = new Float32Array(MAX_AC * 3), trailPos = new Float32Array(MAX_AC * 6);
+const acGeo = new THREE.BufferGeometry(), trailGeo = new THREE.BufferGeometry();
+acGeo.setAttribute('position', new THREE.BufferAttribute(acPos, 3));
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+const acDots = new THREE.Points(acGeo, new THREE.PointsMaterial({ size: .022, sizeAttenuation: true, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, map: glowTexture([[0, 'rgba(255,236,200,1)'], [.35, 'rgba(255,196,120,.7)'], [1, 'rgba(255,160,60,0)']]) }));
+const acTrails = new THREE.LineSegments(trailGeo, new THREE.LineBasicMaterial({ color: 0xffb35c, transparent: true, opacity: .35,
+  depthWrite: false, blending: THREE.AdditiveBlending }));
+acDots.visible = acTrails.visible = false;
+earth.add(acDots, acTrails);                         // children of the Earth, so they turn with it
+let aircraft = [], acNext = 0, acFor = -1;
+const acTmp = new THREE.Vector3(), ll = [0, 0];
+function dest(lat, lon, brg, d) {                    // great-circle step: degrees in, radians of arc, result in ll
+  const la = lat * D2R, th = brg * D2R;
+  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(th));
+  ll[0] = la2 / D2R;
+  ll[1] = lon + Math.atan2(Math.sin(th) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2)) / D2R;
+  return ll;
+}
+const acR = alt => 1.013 + Math.min(Math.max(alt, 0), 45000) / 45000 * .01;   // a little above the clouds, higher when higher
+async function loadTraffic() {
+  const st = STOPS[tour.i], want = tour.i, el = $('t-traffic');
+  try {
+    const r = await fetch(`${FLIGHTS_URL}?lat=${st.lat}&lon=${st.lon}&r=250`);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (!spotSel || tour.i !== want) return;
+    aircraft = d.ac;
+    el.textContent = (d.ac.length ? `● ${d.ac.length} aircraft live` : 'No aircraft in range right now') + ' · data adsb.lol';
+    el.hidden = false;
+  } catch { el.hidden = true; }
+}
+function updateTraffic(t, dt) {
+  if (!FLIGHTS_URL || !spotSel || tour.state !== 'in') {
+    if (aircraft.length || acFor >= 0) { aircraft = []; acFor = -1; $('t-traffic').hidden = true; }
+    acDots.visible = acTrails.visible = false;
+    return;
+  }
+  if (acFor !== tour.i || t > acNext) { acFor = tour.i; acNext = t + 15; loadTraffic(); }
+  // dead-reckon each aircraft along its track between updates; trail = where it was ~4 minutes ago
+  const n = Math.min(aircraft.length, MAX_AC);
+  for (let i = 0; i < n; i++) {
+    const a = aircraft[i], arc = a.gs * 1.852 / 6371;   // knots -> radians of arc per hour
+    dest(a.lat, a.lon, a.trk, arc / 3600 * dt); a.lat = ll[0]; a.lon = ll[1];
+    const r = acR(a.alt);
+    localDir(a.lat, a.lon, acTmp).multiplyScalar(r);
+    acPos[i * 3] = acTmp.x; acPos[i * 3 + 1] = acTmp.y; acPos[i * 3 + 2] = acTmp.z;
+    trailPos[i * 6] = acTmp.x; trailPos[i * 6 + 1] = acTmp.y; trailPos[i * 6 + 2] = acTmp.z;
+    dest(a.lat, a.lon, a.trk + 180, arc / 15);
+    localDir(ll[0], ll[1], acTmp).multiplyScalar(r);
+    trailPos[i * 6 + 3] = acTmp.x; trailPos[i * 6 + 4] = acTmp.y; trailPos[i * 6 + 5] = acTmp.z;
+  }
+  acGeo.setDrawRange(0, n); trailGeo.setDrawRange(0, n * 2);
+  acGeo.attributes.position.needsUpdate = trailGeo.attributes.position.needsUpdate = true;
+  acDots.visible = acTrails.visible = n > 0;
+}
+
 addEventListener('keydown', e => { if (e.key === 'Escape') { if (mvOn) setMv(false); else if (spotSel) selectSpot(false); } });
 
 // ---- the show-off: Metavision view. Sit in the logo's pupil with the sun behind it; drag to steer its shadow ----
@@ -1254,6 +1317,7 @@ function frame() {
   }
   gobo.uMv.value += ((mvOn ? 1 : 0) - gobo.uMv.value) * Math.min(1, rdt * 1.8);
   place(t);
+  updateTraffic(t, rdt);
   moveHeroes(reduce ? 0 : t);
 
   if (mvOn) {   // fly into Metavision's pupil; after that the controls are yours

@@ -50,6 +50,16 @@
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .hint { position: absolute; right: 16px; bottom: 20px; color: var(--dim); pointer-events: none; transition: opacity .3s; }
   @media (max-width: 700px) { .hint { display: none; } }
+  .mv-btn { position: absolute; z-index: 5; top: 84px; right: 16px; display: flex; align-items: center; gap: 10px; padding: 12px 18px;
+            cursor: pointer; color: var(--ink); font: 500 12px/1 "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase;
+            background: color-mix(in oklch, var(--accent) 16%, var(--bg)); border: 1px solid var(--accent);
+            box-shadow: 0 0 28px color-mix(in oklch, var(--accent) 40%, transparent); transition: background .2s, box-shadow .2s; }
+  .mv-btn:hover, .mv-btn:focus-visible { background: color-mix(in oklch, var(--accent) 30%, var(--bg)); outline: none;
+                                         box-shadow: 0 0 40px color-mix(in oklch, var(--accent) 60%, transparent); }
+  .mv-btn .eye { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; flex: none;
+                 background: radial-gradient(circle, currentColor 0 2px, transparent 3px 5px, currentColor 5px); animation: blink 2.4s ease-in-out infinite; }
+  @media (min-width: 1152px) { .mv-btn { right: calc(50% - 544px); } }
+  @media (max-width: 640px) { .mv-btn { top: 232px; left: 16px; right: auto; padding: 10px 14px; } }
 
   /* the tour: one card per place the spotlight visits */
   .tour { position: absolute; z-index: 4; left: 16px; bottom: 20px; width: min(400px, calc(100% - 32px)); padding: 20px;
@@ -253,7 +263,8 @@
       <div class="mono"><span>Software · Analytics · Dota 2 caster</span><span class="dot"></span><span>MBA Business Analytics</span><span class="dot"></span><span>Ex: Hilti IT</span></div>
     </div></div>
     <div class="labels" id="labels"></div>
-    <div class="hint mono" id="hint">Drag to orbit · select a world</div>
+    <div class="hint mono" id="hint">Drag to orbit · scroll to zoom</div>
+    <button class="mv-btn" id="mv-btn" aria-pressed="false"><span class="eye" aria-hidden="true"></span><span id="mv-label">Metavision view</span></button>
     <aside class="tour" id="tour" aria-live="polite" aria-label="Places">
       <div class="tour-top mono"><span id="t-where"></span><b id="t-num"></b></div>
       <h3 id="t-title"></h3>
@@ -505,7 +516,9 @@ const OVERVIEW = new THREE.Vector3(0.4, 2.6, 10.5);    // the opening wide shot,
 camera.position.copy(OVERVIEW);
 
 const controls = new OrbitControls(camera, canvas);
-controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+controls.enableDamping = true; controls.enablePan = false;
+// scroll (or pinch) to zoom: the home page is one screen, so the wheel isn't needed for scrolling there
+controls.enableZoom = true; controls.zoomSpeed = .6; controls.minDistance = 1.35; controls.maxDistance = 16;
 canvas.style.touchAction = 'pan-y';           // OrbitControls sets 'none'; keep page scroll on phones
 
 // ---- sun: one light source, everything is lit from it ----
@@ -560,6 +573,45 @@ const sunU = { value: SUN_DIR }, timeU = { value: 0 };
 const spotU = { value: new THREE.Vector3(-1, 0, 0) }, moonK = { value: 0 }, spotR = { value: .3 }, heroK = { value: 0 };
 // the visitor: a marker where their timezone says they are
 const youU = { value: new THREE.Vector3() }, youK = { value: 0 };
+
+// ---- Metavision view: the logo as a gobo. With the sun behind Metavision, sunlight only gets through its gaps ----
+// uC: logo centre, uNx: logo axis (towards Earth), uE1/uE2: the logo's own x/y axes, uR: logo radius,
+// uF: how far behind the logo the light spreads from (sets how big the pattern lands), uMv: 0..1 into the view.
+const gobo = { uC: { value: new THREE.Vector3() }, uNx: { value: new THREE.Vector3(0, 0, 1) }, uE1: { value: new THREE.Vector3(1, 0, 0) },
+               uE2: { value: new THREE.Vector3(0, 1, 0) }, uR: { value: .42 }, uF: { value: 1.9 }, uMv: { value: 0 } };
+const GOBO = /* glsl */`
+  uniform vec3 uC; uniform vec3 uNx; uniform vec3 uE1; uniform vec3 uE2; uniform float uR; uniform float uF; uniform float uMv;
+  // the logo's metal, matching logoGeometry(): three rings of segments with gaps between them, and a thin rim.
+  // w is the edge softness in logo radii (the penumbra)
+  float ringSolid(float r, float a, float r0, float r1, float n, float off, float w) {
+    float inR = smoothstep(r0 - w, r0 + w, r) * (1. - smoothstep(r1 - w, r1 + w, r));
+    float seg = 6.2831853 / n, x = mod(a - off, seg), wa = w / max(r, .2);
+    return inR * smoothstep(.035 - wa, .035 + wa, x) * (1. - smoothstep(seg - .035 - wa, seg - .035 + wa, x));
+  }
+  float logoSolid(vec2 q, float w) {
+    float r = length(q);
+    if (r < .17) return 0.;                          // the open centre (and no atan at 0,0)
+    float a = atan(q.y, q.x);
+    float rim = smoothstep(.965 - w, .965 + w, r) * (1. - smoothstep(1. - w, 1. + w, r));
+    return clamp(ringSolid(r, a, .2, .43, 6., 0., w) + ringSolid(r, a, .48, .7, 8., .25, w)
+               + ringSolid(r, a, .75, .93, 10., .1, w) + rim, 0., 1.);
+  }
+  vec2 logoPlane(vec3 P) {                           // where the light reaching P crossed the logo, in logo radii
+    vec3 Lp = uC - uNx * uF;
+    vec3 X = Lp + (P - Lp) * (uF / max(dot(P - Lp, uNx), 1e-3)) - uC;
+    return vec2(dot(X, uE1), dot(X, uE2)) / uR;
+  }
+  // how much sunlight reaches P past Metavision: a soft shadow of the logo, lit through its gaps, never pitch black
+  float goboLight(vec3 P) {
+    float w = .012 + max(dot(P - uC, uNx), 0.) * .045;   // the penumbra widens with distance, like a real sun's
+    return 1. - logoSolid(logoPlane(P), w) * .88;
+  }
+  // light that came through the gaps, for the shafts
+  float goboThrough(vec3 P) {
+    vec2 q = logoPlane(P);
+    float w = .008 + max(dot(P - uC, uNx), 0.) * .03;
+    return (1. - smoothstep(.98, 1.02, length(q))) * (1. - logoSolid(q, w));
+  }`;
 // five heroes wandering inside the moonlit patch, like players in an observer's shot
 const HERO_COLORS = ['#5eead4', '#60a5fa', '#a78bfa', '#f472b6', '#fbbf24'].map(c => new THREE.Color(c));
 const heroDirs = HERO_COLORS.map(() => new THREE.Vector3());
@@ -629,9 +681,9 @@ function drawHighlight() {
 
 const earthMat = new THREE.ShaderMaterial({
   uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
-              uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU },
+              uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU, ...gobo },
   vertexShader: VERT,
-  fragmentShader: NOISE + /* glsl */`
+  fragmentShader: NOISE + GOBO + /* glsl */`
     uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
     uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
@@ -653,15 +705,16 @@ const earthMat = new THREE.ShaderMaterial({
       float ice = smoothstep(.88, .94, lat + (detail - .5) * .12);
       alb = mix(alb, vec3(.75, .8, .85), ice);
 
-      float NdL = dot(N, L);
-      vec3 col = alb * max(NdL, 0.) * 1.7;
+      // in Metavision view the logo casts its soft shadow (lit through the gaps) across the sunlit face
+      float NdL = dot(N, L), dayK = uMv > .001 ? mix(1., goboLight(vW), uMv) : 1.;
+      vec3 col = alb * max(NdL, 0.) * 1.7 * dayK;
       // terminator: warm scattered band where day meets night
-      col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land);
+      col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land) * dayK;
       // sun glint on water + bright subsolar spot
       vec3 H = normalize(L + V + 1e-5);
       float water = (1. - land) * (1. - ice);
-      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * vec3(1., .9, .75) * step(0., NdL);
-      col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
+      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * vec3(1., .9, .75) * step(0., NdL) * dayK;
+      col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55 * dayK;
       // city lights on the night side
       float night = smoothstep(.12, -.18, NdL);
       float cities = smoothstep(.72, .92, noise(vObj * 160.)) * smoothstep(.45, .7, noise(vObj * 12.));
@@ -678,7 +731,7 @@ const earthMat = new THREE.ShaderMaterial({
       col += texture2D(uHl, vUv).r * uHasMap * ACC * (.03 + area * .5);
       // thin blue limb on the lit side
       float fres = pow(clamp(1. - dot(N, V), 0., 1.), 3.5);   // clamp: rounding can push dot(N,V) past 1, and pow(<0) is NaN on Chrome/ANGLE
-      col += fres * vec3(.25, .5, 1.) * smoothstep(-.25, .5, NdL) * 1.4;
+      col += fres * vec3(.25, .5, 1.) * smoothstep(-.25, .5, NdL) * 1.4 * (dayK * .85 + .15);
       gl_FragColor = vec4(col, 1.);
     }`
 });
@@ -690,19 +743,20 @@ earthTilt.add(earth);
 scene.add(earthTilt);
 
 const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR }, transparent: true, depthWrite: false,
+  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR, ...gobo }, transparent: true, depthWrite: false,
   vertexShader: VERT,
-  fragmentShader: NOISE + /* glsl */`
+  fragmentShader: NOISE + GOBO + /* glsl */`
     uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW;
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun);
       float c = fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006));
       float a = smoothstep(.5, .72, c) * .85;
-      float lit = max(dot(N, L), 0.);
+      float dayK = uMv > .001 ? mix(1., goboLight(vW), uMv) : 1.;
+      float lit = max(dot(N, L), 0.) * dayK;
       float area = smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK;
       float mlit = area * smoothstep(.1, -.15, dot(N, L));
-      vec3 col = vec3(.95) * (lit * 1.05 + .01) + exp(-dot(N, L) * dot(N, L) * 49.) * vec3(.6, .25, .08) * .2
+      vec3 col = vec3(.95) * (lit * 1.05 + .01) + exp(-dot(N, L) * dot(N, L) * 49.) * vec3(.6, .25, .08) * .2 * dayK
                + vec3(.5, .55, .75) * mlit * .7;
       // clear skies under the spotlight, so the country underneath shows
       gl_FragColor = vec4(col, a * max(.15 + .85 * smoothstep(-.2, .2, dot(N, L)), mlit) * (1. - area * .8));
@@ -759,18 +813,52 @@ const beam = new THREE.Mesh(new THREE.CylinderGeometry(.15, .42, 1, 48, 1, true)
 scene.add(beam);
 
 const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 48), new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU }, side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uSun: sunU, uMv: gobo.uMv }, side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   vertexShader: VERT,
   fragmentShader: /* glsl */`
-    uniform vec3 uSun; varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+    uniform vec3 uSun; uniform float uMv; varying vec3 vObj; varying vec3 vN; varying vec3 vW;
     void main(){
       vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
       float rim = pow(clamp(1. + dot(N, V) * 1.0, 0., 1.), 4.);   // BackSide: strongest at the limb
       float lit = smoothstep(-.35, .6, dot(N, normalize(uSun)));
-      gl_FragColor = vec4(vec3(.3, .58, 1.) * rim * lit * .9, 1.);
+      gl_FragColor = vec4(vec3(.3, .58, 1.) * rim * lit * .9 * (1. - uMv * .25), 1.);
     }`
 }));
 scene.add(atmo);
+
+// the light shafts: march each pixel's ray from the logo to the Earth, adding light wherever the gobo lets the sun through
+const SHAFT_L = 2.55;                                // logo to Earth centre (Metavision's station distance)
+const shafts = new THREE.Mesh(new THREE.CylinderGeometry(.42 * 1.03, .42 * (1.9 + SHAFT_L) / 1.9 * 1.03, SHAFT_L, 64, 1, false),
+  new THREE.ShaderMaterial({
+    uniforms: { ...gobo }, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
+    vertexShader: /* glsl */`varying vec3 vW;
+      void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: GOBO + /* glsl */`
+      varying vec3 vW;
+      void main(){
+        vec3 ro = cameraPosition, rd = normalize(vW - ro);
+        float along = dot(rd, uNx);
+        if (along < .02) discard;
+        float t0 = max(0., dot(uC - ro, uNx) / along), t1 = length(vW - ro);
+        // the logo's own metal hides whatever is behind it
+        vec3 P0 = ro + rd * t0 - uC;
+        vec2 q0 = vec2(dot(P0, uE1), dot(P0, uE2)) / uR;
+        if (length(q0) < 1. && logoSolid(q0, .006) > .5) discard;
+        float b = dot(ro, rd), h = b * b - dot(ro, ro) + 1.;   // stop at the Earth (unit sphere at the origin)
+        if (h > 0.) { float te = -b - sqrt(h); if (te > 0.) t1 = min(t1, te); }
+        if (t1 <= t0) discard;
+        float acc = 0.;
+        for (int i = 0; i < 32; i++) {
+          vec3 S = ro + rd * mix(t0, t1, (float(i) + .5) / 32.);
+          acc += goboThrough(S) * exp(-dot(S - uC, uNx) * .5);
+        }
+        acc *= (t1 - t0) / 32.;
+        gl_FragColor = vec4(vec3(1., .9, .72) * acc * acc * .22 * uMv, 1.);   // squared: streaks stay, haze drops
+      }`
+  }));
+shafts.renderOrder = 5; shafts.visible = false;
+scene.add(shafts);
+const mvAxis = new THREE.Vector3(), ORIGIN = new THREE.Vector3();
 
 // ---- the moon: a 3D Metavision logo, lit by the sun ----
 function seg(r0, r1, a0, a1) {
@@ -804,6 +892,9 @@ const moon = new THREE.Group();
 const logo = new THREE.Mesh(logoGeometry(), new THREE.MeshStandardMaterial({ color: 0x9d9ab8, metalness: .7, roughness: .5, emissive: 0x1a1640, emissiveIntensity: .4,
   envMap: new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), .04).texture, envMapIntensity: .35 }));
 logo.scale.setScalar(.42);
+const LOGO_LIT = { color: logo.material.color.clone(), emissive: logo.material.emissiveIntensity, env: logo.material.envMapIntensity };
+const LOGO_DARK = new THREE.Color(0x15141c);
+logo.material.transparent = true;
 moon.add(logo);
 scene.add(moon);
 
@@ -881,13 +972,13 @@ function focusOn(w) {
   $('p-body').textContent = w.body; $('p-go').href = w.href;
   panel.hidden = false;
 }
-controls.addEventListener('start', () => { flying = false; });
+controls.addEventListener('start', () => { flying = false; mvFly = false; });
 
 // click on a world in the scene
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
 canvas.addEventListener('pointerdown', e => down = [e.clientX, e.clientY]);
 canvas.addEventListener('pointerup', e => {
-  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+  if (mvOn || !down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
   const r = canvas.getBoundingClientRect();
   ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
   ray.setFromCamera(ndc, camera);
@@ -915,11 +1006,11 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .4, .95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
-let stageW = 1, stageH = 1;
+let stageW = 1, stageH = 1, baseFov = 38;
 function resize() {
   const w = stage.clientWidth, h = stage.clientHeight;
   if (!w || !h) return;                          // hidden on another page
-  stageW = w; stageH = h;
+  stageW = w; stageH = h; baseFov = w < 700 ? 52 : 38;
   renderer.setSize(w, h, false); composer.setSize(w, h);
   camera.aspect = w / h;
   camera.fov = w < 700 ? 52 : 38;             // phones: pull back so Earth and moon fit
@@ -934,14 +1025,16 @@ new IntersectionObserver(([e]) => visible = e.isIntersecting).observe(stage);
 const clock = new THREE.Clock(), tmp = new THREE.Vector3(), goal = new THREE.Vector3(), look = new THREE.Vector3();
 let motion = 1, viewShift = 0;
 // slow machine (e.g. no GPU acceleration)? after ~2s under 30 fps, drop bloom and render at lower resolution
-let perfFrames = 0, perfStart = 0;
+let perfFrames = 0, perfStart = 0, lowPerf = false;   // lowPerf also skips the ray-marched light shafts
 function adaptQuality(now) {
   if (perfFrames < 0) return;
   if (!perfStart) perfStart = now;
-  if (++perfFrames < 60) return;
+  // decide after 1.5 s (not after N frames: on a very slow machine N frames can take forever)
+  if (++perfFrames < 20 || now - perfStart < 1500) return;
   const fps = perfFrames / ((now - perfStart) / 1000);
   perfFrames = -1;
-  if (fps < 30) { bloom.enabled = false; renderer.setPixelRatio(.75); composer.setPixelRatio(.75); resize(); }
+  // ?hq in the URL forces full quality
+  if (fps < 30 && !location.search.includes('hq')) { lowPerf = true; bloom.enabled = false; renderer.setPixelRatio(.75); composer.setPixelRatio(.75); resize(); }
 }
 const D2R = Math.PI / 180;
 
@@ -993,7 +1086,27 @@ function selectSpot(on) {
   if (!on) tour.next = clock.elapsedTime + DWELL;
   placePill.setAttribute('aria-pressed', String(on));
 }
-addEventListener('keydown', e => { if (e.key === 'Escape' && spotSel) selectSpot(false); });
+addEventListener('keydown', e => { if (e.key === 'Escape') { if (mvOn) setMv(false); else if (spotSel) selectSpot(false); } });
+
+// ---- the show-off: Metavision view. Sit in the logo's pupil with the sun behind it; drag to steer its shadow ----
+// While the view is on, Metavision stays between the camera and Earth and the sun stays behind it, so the shadow
+// follows wherever you orbit (real time of day pauses and comes back on exit).
+let mvOn = false, mvFly = false;
+const mvBtn = $('mv-btn'), mvCamGoal = new THREE.Vector3(), MV_CAM_R = 2.75;   // just behind the logo (station radius 2.55)
+function setMv(on) {
+  if (on === mvOn) return;
+  if (on) { if (focus) focusOn(null); if (spotSel) selectSpot(false); }
+  mvOn = on;
+  if (on) { mvFly = true; mvCamGoal.copy(STATION).setLength(MV_CAM_R); }
+  else { flying = true; tour.want = tour.i; tour.state = 'out'; }
+  controls.minDistance = on ? MV_CAM_R : 1.35;
+  heroCopy.style.opacity = on ? 0 : 1;
+  tourEl.hidden = $('hint').hidden = on;
+  labelsEl.style.visibility = on ? 'hidden' : '';
+  mvBtn.setAttribute('aria-pressed', String(on));
+  $('mv-label').textContent = on ? 'Exit view' : 'Metavision view';
+}
+mvBtn.onclick = () => setMv(!mvOn);
 STOPS.forEach((st, i) => {
   const b = document.createElement('button');
   b.setAttribute('aria-label', st.title); b.onclick = () => goTo(i);
@@ -1044,7 +1157,7 @@ function updateTour(t, dt) {
 }
 // ---- real time of day: the sun sits over the point on Earth where it is overhead right now ----
 // Earth and sun turn together (the slow spin, the tour), so day and night on the globe always match the clock.
-const sunLocal = new THREE.Vector3();
+const sunLocal = new THREE.Vector3(), sunTmp = new THREE.Vector3();
 function updateSun(now = new Date()) {
   const day = (now - Date.UTC(now.getUTCFullYear(), 0, 0)) / 864e5;                       // day of the year
   const decl = -23.44 * Math.cos(2 * Math.PI / 365 * (day + 10));                          // solar declination, degrees
@@ -1053,6 +1166,8 @@ function updateSun(now = new Date()) {
   const utc = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
   localDir(decl, -15 * (utc - 12 + eot / 60), sunLocal);
   SUN_DIR.copy(sunLocal).transformDirection(earth.matrixWorld);
+  // Metavision view: the sun swings round behind the camera, so Metavision's shadow lands wherever you look
+  if (gobo.uMv.value > .001) SUN_DIR.lerp(sunTmp.copy(camera.position).normalize(), gobo.uMv.value).normalize();
   sunLight.position.copy(SUN_DIR).multiplyScalar(50);
   sunPos.copy(SUN_DIR).multiplyScalar(70); sun.position.copy(sunPos); corona.position.copy(sunPos);
 }
@@ -1085,11 +1200,30 @@ function place(t) {
   youU.value.copy(youLocal).transformDirection(earth.matrixWorld);
   // Metavision holds station over the stage, drifting a little
   moon.position.copy(STATION).applyAxisAngle(UP, Math.sin(t * .15) * .1);
+  // Metavision view: it rides between the camera and Earth
+  if (gobo.uMv.value > .001) moon.position.lerp(sunTmp.copy(camera.position).setLength(2.55), gobo.uMv.value);
   // a mirror: the face normal bisects "to the sun" and "to the spot", so sunlight bounces onto that spot
   const toSpot = cand.copy(spotU.value).sub(moon.position);
   const len = toSpot.length(); toSpot.divideScalar(len);
-  look.copy(SUN_DIR).add(toSpot).normalize().add(moon.position);
+  look.copy(SUN_DIR).add(toSpot).normalize()                                          // mirror for the tour...
+    .lerp(mvAxis.copy(moon.position).negate().normalize(), gobo.uMv.value).normalize()  // ...facing Earth in Metavision view
+    .add(moon.position);
   moon.lookAt(look); logo.rotation.z = t * .25;
+  const mv = gobo.uMv.value;
+  logo.material.color.lerpColors(LOGO_LIT.color, LOGO_DARK, mv);
+  logo.material.emissiveIntensity = LOGO_LIT.emissive * (1 - mv);
+  logo.material.envMapIntensity = LOGO_LIT.env * (1 - mv * .8);
+  logo.material.opacity = 1 - mv * .88;            // a ghost in the view, so it never hides the Earth you're steering over
+  logo.material.depthWrite = mv < .5;
+  moon.updateMatrixWorld(true);
+  logo.matrixWorld.extractBasis(gobo.uE1.value, gobo.uE2.value, gobo.uNx.value);
+  gobo.uE1.value.normalize(); gobo.uE2.value.normalize(); gobo.uNx.value.normalize();
+  gobo.uC.value.copy(moon.position);
+  shafts.visible = gobo.uMv.value > .001 && !lowPerf && perfFrames < 0;   // only once the quality check has passed
+  if (shafts.visible) {
+    shafts.position.copy(moon.position).addScaledVector(gobo.uNx.value, SHAFT_L / 2);
+    shafts.quaternion.setFromUnitVectors(UP, mvAxis.copy(gobo.uNx.value).negate());
+  }
   // beam from the spot on the surface up to the moon (+y of the cone is the narrow moon end)
   beam.position.copy(spotU.value).addScaledVector(toSpot, -len / 2);
   beam.scale.set(spotR.value / .42, len, spotR.value / .42);
@@ -1110,12 +1244,25 @@ function frame() {
   motion += ((focus || reduce ? 0 : 1) - motion) * Math.min(1, dt * 2);
   clouds.rotation.y += dt * .01 * motion;
   PROJECTS.forEach(p => p.a += dt * p.sp * motion);
-  updateTour(t, Math.min(raw, .25));                // real time, so transitions keep pace on slow machines
-  if (tour.state !== 'spin' && !spotSel) earth.rotation.y += dt * .025 * motion;   // slow spin (sun turns with it)
+  const rdt = Math.min(raw, .25);                   // real time, so transitions keep pace on slow machines
+  if (mvOn) {
+    earth.rotation.y += dt * .025 * motion;         // keeps its slow spin under the shadow
+    moonK.value = Math.max(0, moonK.value - rdt * 3);
+  } else {
+    updateTour(t, rdt);
+    if (tour.state !== 'spin' && !spotSel) earth.rotation.y += dt * .025 * motion;   // slow spin (sun turns with it)
+  }
+  gobo.uMv.value += ((mvOn ? 1 : 0) - gobo.uMv.value) * Math.min(1, rdt * 1.8);
   place(t);
   moveHeroes(reduce ? 0 : t);
 
-  if (flying) {
+  if (mvOn) {   // fly into Metavision's pupil; after that the controls are yours
+    if (mvFly) {
+      const k = 1 - Math.exp(-rdt * 2.2);
+      camera.position.lerp(mvCamGoal, k); controls.target.lerp(ORIGIN, k);
+      if (camera.position.distanceTo(mvCamGoal) < .01) mvFly = false;
+    }
+  } else if (flying) {
     const k = 1 - Math.exp(-dt * 2.6);
     if (focus) {
       const p = focus.obj.position;
@@ -1125,7 +1272,7 @@ function frame() {
       controls.target.lerp(p, k);
     } else if (spotSel) {
       finalT.copy(stopLocal).applyAxisAngle(UP, tour.state === 'spin' ? spinGoal : earth.rotation.y).applyQuaternion(earthTilt.quaternion);
-      goal.copy(finalT).addScaledVector(CAM_DIR, .5).normalize().multiplyScalar((stageW < 700 ? 2.8 : 2.3) + spotR.value * 3);
+      goal.copy(finalT).addScaledVector(CAM_DIR, .35).normalize().multiplyScalar((stageW < 700 ? 1.95 : 1.6) + spotR.value * 2.2);
       controls.target.lerp(finalT, k);
     } else { goal.copy(CAM_DIR).multiplyScalar(stageW < 700 ? 7.4 : 5.6); controls.target.lerp(new THREE.Vector3(), k); }
     camera.position.lerp(goal, k);
@@ -1133,7 +1280,8 @@ function frame() {
   } else if (focus) controls.target.copy(focus.obj.position);
   controls.update();
   // wide screens: shift the picture so Earth sits right of the headline and the tour card
-  viewShift += ((!focus && stageW >= 900 ? -.17 : 0) - viewShift) * Math.min(1, dt * 3);
+  viewShift += ((!focus && !mvOn && stageW >= 900 ? -.17 : 0) - viewShift) * Math.min(1, dt * 3);
+  camera.fov = baseFov + (58 - baseFov) * gobo.uMv.value;
   camera.setViewOffset(stageW, stageH, viewShift * stageW, 0, stageW, stageH);
 
   // labels sit just above each world
@@ -1149,7 +1297,7 @@ function frame() {
   tmp.copy(sunPos).project(camera);
   // fade by how directly we face the sun, so it never pops or flips when the sun passes behind the camera
   const facing = camera.getWorldDirection(look).dot(SUN_DIR);
-  sunGlow.style.opacity = THREE.MathUtils.smoothstep(facing, .2, .6);
+  sunGlow.style.opacity = THREE.MathUtils.smoothstep(facing, .2, .6) * (1 - gobo.uMv.value);
   if (facing > .2) sunGlow.style.transform = `translate(${(tmp.x * .5 + .5) * stage.clientWidth}px, ${(-tmp.y * .5 + .5) * stage.clientHeight}px)`;
 
   composer.render();

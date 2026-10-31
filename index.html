@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesba Rahman</title>
+<meta name="description" content="MD Mesbahur Rahman: software engineer, business analyst and Dota 2 caster. Builder of Metavision.">
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: oklch(0.11 0.008 270); --surface: oklch(0.14 0.01 270); --line: oklch(0.26 0.01 270);
+    --ink: oklch(0.96 0.005 270); --muted: oklch(0.68 0.01 270); --dim: oklch(0.48 0.01 270);
+    --accent: oklch(0.66 0.19 278); --sun: oklch(0.86 0.13 75); --live: oklch(0.72 0.17 160);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scrollbar-color: var(--accent) var(--bg); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Archivo, system-ui, sans-serif; overflow-x: hidden; }
+  a { color: inherit; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  h1, h2, h3 { font-stretch: 68%; font-weight: 700; line-height: .95; margin: 0; letter-spacing: -.01em; }
+  .hl { color: var(--accent); }
+
+  nav { position: fixed; inset: 0 0 auto; z-index: 20; border-bottom: 1px solid color-mix(in oklch, var(--line) 60%, transparent);
+        background: color-mix(in oklch, var(--bg) 88%, transparent); }
+  nav .wrap { display: flex; justify-content: space-between; align-items: center; height: 60px; }
+  nav .name { font-weight: 700; font-stretch: 75%; font-size: 18px; text-decoration: none; }
+  nav .links { display: flex; gap: 22px; }
+  nav .links a { text-decoration: none; color: var(--muted); }
+  nav .links a:hover { color: var(--ink); }
+  nav .links a[aria-current="page"] { color: var(--ink); box-shadow: 0 1px 0 var(--accent); }
+  @media (max-width: 600px) {
+    nav .name .full, nav .links .email { display: none; }
+    nav .links { gap: 14px; letter-spacing: .04em; }
+  }
+
+  /* ---- space hero ---- */
+  #space { position: relative; height: 100svh; min-height: 600px; overflow: hidden; background: #020205; }
+  /* sun glow: one fixed-size layer, moved with transform/opacity only (no repaints) */
+  .sunglow { position: absolute; left: 0; top: 0; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; pointer-events: none; opacity: 0;
+             background: radial-gradient(circle, oklch(0.95 0.08 80 / .5), oklch(0.8 0.12 60 / .12) 20%, transparent 50%); will-change: transform, opacity; }
+  #space canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
+  #space canvas:active { cursor: grabbing; }
+  .hero-copy { position: absolute; z-index: 2; left: 0; right: 0; top: 104px; pointer-events: none; transition: opacity .5s; }
+  .hero-copy h1 { font-size: clamp(54px, 10vw, 128px); text-transform: uppercase; }
+  .hero-copy .mono { margin-top: 22px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+  .hint { position: absolute; right: 16px; bottom: 20px; color: var(--dim); pointer-events: none; transition: opacity .3s; }
+  @media (max-width: 700px) { .hint { display: none; } }
+
+  /* the tour: one card per place the spotlight visits */
+  .tour { position: absolute; z-index: 4; left: 16px; bottom: 20px; width: min(400px, calc(100% - 32px)); padding: 20px;
+          background: color-mix(in oklch, var(--bg) 88%, transparent); border: 1px solid var(--line); transition: opacity .35s, transform .35s; }
+  @media (min-width: 1152px) { .tour { left: calc(50% - 544px); } }
+  .tour[hidden] { display: block; opacity: 0; transform: translateY(12px); pointer-events: none; }
+  .tour-top { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); }
+  .tour-top b { color: var(--accent); font-weight: 500; }
+  .tour h3 { font-size: 36px; margin: 12px 0 8px; }
+  .tour p { margin: 0; color: var(--muted); font-size: 15px; min-height: 4.8em; }
+  .tour.swap h3, .tour.swap p, .tour.swap .tour-top span { animation: in .45s ease; }
+  .tour-nav { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .tour-nav > button { font: inherit; width: 34px; height: 34px; flex: none; cursor: pointer; color: var(--ink);
+                       background: none; border: 1px solid var(--line); }
+  .tour-nav > button:hover, .tour-nav > button:focus-visible { border-color: var(--accent); outline: none; }
+  .dots { display: flex; gap: 6px; flex: 1; }
+  .dots button { position: relative; flex: 1; height: 20px; padding: 0; border: 0; background: none; cursor: pointer; }
+  .dots button::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 3px;
+                         background: linear-gradient(90deg, var(--accent) var(--p, 0%), var(--line) 0); }
+  .dots button:hover::before, .dots button:focus-visible::before { top: 8px; height: 5px; }
+  .dots button:focus-visible { outline: none; }
+  @media (max-width: 640px) { .tour { padding: 16px; } .tour h3 { font-size: 28px; } .tour p { font-size: 14px; min-height: 0; } }
+  .pill.place { border-color: color-mix(in oklch, var(--accent) 60%, transparent); }
+  .pill.place::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%;
+                        background: var(--accent); box-shadow: 0 0 8px var(--accent); vertical-align: 1px; }
+  .pill.you { pointer-events: none; color: var(--muted); border-color: color-mix(in oklch, var(--live) 45%, transparent); }
+  .pill.you::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%;
+                      background: var(--live); box-shadow: 0 0 8px var(--live); vertical-align: 1px; }
+  .badge { display: inline-block; margin-left: 12px; padding: 4px 8px; border: 1px solid var(--accent); color: var(--accent);
+           font: 500 11px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; vertical-align: middle; }
+
+  .labels { position: absolute; z-index: 3; inset: 0; pointer-events: none; }
+  .pill { position: absolute; left: 0; top: 0; pointer-events: auto; white-space: nowrap; cursor: pointer;
+          font: 500 11px/1 "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase;
+          color: var(--ink); background: color-mix(in oklch, var(--bg) 85%, transparent);
+          border: 1px solid color-mix(in oklch, var(--line) 80%, transparent); border-radius: 999px; padding: 7px 11px;
+          transition: border-color .2s, opacity .3s; will-change: transform; }
+  .pill:hover, .pill:focus-visible, .pill[aria-pressed="true"] { border-color: var(--accent); outline: none; }
+  .pill.moon { border-color: var(--accent); color: var(--ink); }
+
+  .panel { position: absolute; z-index: 4; right: 16px; bottom: 20px; width: min(380px, calc(100% - 32px)); padding: 20px;
+           background: color-mix(in oklch, var(--bg) 92%, transparent);
+           border: 1px solid var(--line); border-radius: 4px; transition: opacity .35s, transform .35s; }
+  .panel[hidden] { display: block; opacity: 0; transform: translateY(12px); pointer-events: none; }
+  .panel .kind { color: var(--accent); }
+  .panel h3 { font-size: 34px; margin: 10px 0 10px; }
+  .panel p { margin: 0 0 14px; color: var(--muted); font-size: 15px; }
+  .panel .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .panel button, .panel a.go { font: inherit; background: none; border: 0; color: var(--ink); cursor: pointer; padding: 0; text-decoration: none; }
+  .panel a.go { color: var(--accent); }
+  @media (max-width: 640px) { .panel { right: 16px; bottom: 56px; } .panel h3 { font-size: 28px; } }
+
+  /* ---- sections ---- */
+  section { padding: 120px 0 0; }
+  /* pages: one view at a time */
+  main > [data-view]:not(#space) { padding-top: 140px; }
+  .view-in { animation: page-in .5s ease both; }
+  @keyframes page-in { from { opacity: 0; transform: translateY(14px); } }
+  .pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 110px; padding-top: 28px; padding-bottom: 28px; border-top: 1px solid var(--line); }
+  .pager[hidden] { display: none; }
+  .pager a { text-decoration: none; font-stretch: 68%; font-weight: 700; font-size: clamp(26px, 4vw, 44px); line-height: 1; transition: color .2s; }
+  .pager a:hover { color: var(--accent); }
+  .pager a:last-child { margin-left: auto; text-align: right; }
+  .eyebrow { color: var(--muted); margin-bottom: 18px; }
+  .big { font-size: clamp(44px, 7vw, 88px); }
+  .lede { max-width: 640px; color: var(--muted); font-size: 18px; margin: 24px 0 0; }
+
+  /* pipeline nodes */
+  .pipe { position: relative; margin-top: 56px; padding: 40px 16px; border: 1px solid var(--line);
+          background-color: var(--surface);
+          background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+          background-size: 48px 48px; background-position: -1px -1px; }
+  .pipe::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+                 background: radial-gradient(ellipse at 50% 40%, transparent 30%, var(--surface) 85%); }
+  .nodes { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; align-items: stretch; }
+  .node { background: color-mix(in oklch, var(--bg) 92%, transparent); border: 1px solid var(--line); padding: 16px; min-height: 210px;
+          display: flex; flex-direction: column; gap: 12px; }
+  .node header { display: flex; justify-content: space-between; align-items: center; }
+  .node .t { font: 500 13px "IBM Plex Mono", monospace; }
+  .node .s { color: var(--dim); }
+  .wire { position: relative; height: 1px; background: color-mix(in oklch, var(--accent) 45%, transparent); align-self: center; }
+  .nodes .link { display: grid; grid-template-columns: 1fr 28px; }
+  .nodes .link:last-child { grid-template-columns: 1fr; }
+  .wire i { position: absolute; top: -2px; left: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+            box-shadow: 0 0 8px var(--accent); animation: flow 1.4s linear infinite; }
+  .wire i:nth-child(2) { animation-delay: .7s; }
+  @keyframes flow { from { left: 0; } to { left: calc(100% - 5px); } }
+  .bars { display: flex; gap: 3px; align-items: flex-end; height: 44px; }
+  .bars span { flex: 1; background: var(--live); opacity: .8; animation: bar 1s ease-in-out infinite alternate; }
+  @keyframes bar { from { height: 15%; } to { height: 100%; } }
+  .feed { font: 12px/1.5 "IBM Plex Mono", monospace; color: var(--muted); display: grid; gap: 4px; }
+  .feed div { animation: in .4s ease; }
+  .feed div:first-child { color: var(--ink); }
+  .feed b { color: var(--accent); font-weight: 500; }
+  @keyframes in { from { opacity: 0; transform: translateY(-4px); } }
+  .frame { position: relative; flex: 1; min-height: 110px; border: 1px dashed var(--line); }
+  .frame .h { position: absolute; width: 8px; height: 8px; margin: -4px; border-radius: 50%; transition: left 1.2s cubic-bezier(.6,0,.2,1), top 1.2s cubic-bezier(.6,0,.2,1); }
+  .frame .box { position: absolute; border: 1px solid var(--accent); transition: all 1.2s cubic-bezier(.6,0,.2,1); box-shadow: 0 0 0 9999px color-mix(in oklch, var(--bg) 35%, transparent); }
+  .mini { position: relative; flex: 1; min-height: 110px; aspect-ratio: 1; max-height: 130px; align-self: center; border: 1px solid var(--line);
+          background: linear-gradient(135deg, oklch(0.3 0.06 150 / .5), transparent 50%, oklch(0.3 0.08 25 / .5)); }
+  .mini::before { content: ""; position: absolute; inset: 0; background: linear-gradient(45deg, transparent 48%, var(--line) 49% 51%, transparent 52%); }
+  .mini .cam { position: absolute; width: 26%; height: 18%; margin: -9% -13%; border: 1px solid var(--ink); transition: left .5s ease-in, top .5s ease-in; }
+  .ok { display: flex; align-items: center; gap: 8px; color: var(--live); }
+  @media (max-width: 900px) {
+    .nodes { grid-template-columns: 1fr; }
+    .nodes .link { grid-template-columns: 1fr; grid-template-rows: auto 28px; }
+    .nodes .link:last-child { grid-template-rows: auto; }
+    .wire { width: 1px; height: 100%; justify-self: center; }
+    .wire i { left: -2px; animation-name: flowv; }
+    @keyframes flowv { from { top: 0; } to { top: calc(100% - 5px); } }
+  }
+  /* live on EPC */
+  .live { display: block; margin-top: 48px; color: inherit; text-decoration: none; border: 1px solid oklch(0.62 0.2 25 / .45);
+          background: linear-gradient(120deg, oklch(0.3 0.1 25 / .35), transparent 55%), var(--surface); transition: border-color .2s; }
+  .live:hover { border-color: oklch(0.68 0.22 25); }
+  .live-head { display: flex; justify-content: space-between; gap: 16px; padding: 12px 18px; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .rec { color: oklch(0.72 0.2 25); }
+  .rec i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: currentColor;
+           box-shadow: 0 0 10px currentColor; animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .live-body { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: end; padding: 30px 18px 28px; }
+  .live h3 { font-size: clamp(34px, 5vw, 60px); }
+  .live p { color: var(--muted); max-width: 560px; margin: 14px 0 0; }
+  .live-stats { display: flex; gap: 36px; }
+  .live-stats b { display: block; font-stretch: 68%; font-size: clamp(40px, 5vw, 56px); line-height: 1; }
+  .live-stats span { color: var(--muted); font-size: 14px; }
+  @media (max-width: 700px) { .live-body { grid-template-columns: 1fr; } }
+
+  /* how it works */
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 56px; background: var(--line); border: 1px solid var(--line); }
+  .features div { background: var(--bg); padding: 22px; }
+  .features .mono { color: var(--accent); }
+  .features p { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+  @media (max-width: 860px) { .features { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+
+  /* benchmark */
+  .bench { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; margin-top: 72px; align-items: start; }
+  .bench h3 { font-size: clamp(30px, 4vw, 46px); }
+  .bench p { color: var(--muted); margin: 14px 0 0; }
+  .bench table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .bench th, .bench td { text-align: right; padding: 13px 0 13px 16px; border-bottom: 1px solid var(--line); }
+  .bench th:first-child, .bench td:first-child { text-align: left; padding-left: 0; color: var(--muted); }
+  .bench th { color: var(--dim); font-weight: 500; }
+  .bench td:last-child { font-weight: 700; }
+  .bench .note { color: var(--dim); margin-top: 14px; }
+  @media (max-width: 760px) { .bench { grid-template-columns: 1fr; } }
+
+  /* project list */
+  .list { margin-top: 48px; border-top: 1px solid var(--line); }
+  .item { display: grid; grid-template-columns: 56px 130px 1fr; gap: 8px 20px; padding: 26px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .item .n, .item .k { color: var(--dim); }
+  .item h3 { font-size: 30px; }
+  .item p { grid-column: 3; margin: 6px 0 0; color: var(--muted); max-width: 640px; }
+  .item .stack { grid-column: 3; color: var(--dim); margin-top: 6px; }
+  @media (max-width: 640px) { .item { grid-template-columns: 40px 1fr; } .item .k { grid-column: 2; } .item h3, .item p, .item .stack { grid-column: 1 / -1; } }
+
+  /* on air */
+  .onair { position: relative; margin-top: 0; padding: 120px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden;
+           background: radial-gradient(ellipse at 80% 50%, oklch(0.3 0.1 25 / .35), transparent 60%), radial-gradient(ellipse at 10% 80%, oklch(0.3 0.12 278 / .35), transparent 55%); }
+  .wave { display: flex; gap: 4px; align-items: center; height: 80px; margin-top: 40px; }
+  .wave span { width: 4px; border-radius: 2px; background: var(--accent); animation: bar 1.1s ease-in-out infinite alternate; }
+
+  .rows { margin-top: 40px; }
+  .rows > div { display: grid; grid-template-columns: 200px 1fr; gap: 24px; padding: 26px 0; border-top: 1px solid var(--line); }
+  .rows .when { color: var(--dim); }
+  .rows h3 { font-size: 28px; }
+  .rows .where { color: var(--muted); margin-top: 6px; }
+  .rows ul { margin: 12px 0 0; padding-left: 18px; color: var(--muted); }
+  @media (max-width: 640px) { .rows > div { grid-template-columns: 1fr; gap: 8px; } }
+
+  .contact { text-align: center; padding: 140px 0 100px; }
+  .contact a.mail { display: inline-block; margin-top: 36px; padding: 16px 22px; border: 1px solid var(--line); text-decoration: none; }
+  .contact a.mail:hover { border-color: var(--accent); }
+  footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--dim); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="name" href="#"><span class="full">MD Mesbahur </span><span class="hl">"Mesba"</span><span class="full"> Rahman</span></a>
+    <div class="links mono">
+      <a href="#metavision">Metavision</a>
+      <a href="#casting">Casting</a>
+      <a href="#work">Work</a>
+      <a href="#about">About</a>
+      <a class="email" href="mailto:mesbahrahman001@gmail.com">Email ↗</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div id="space" data-view="home" role="region" aria-label="Interactive solar system of projects. Earth is home; the moon is Metavision. Select a label to travel. Drag to look around.">
+    <canvas aria-hidden="true"></canvas>
+    <div class="sunglow" id="sunglow"></div>
+    <div class="hero-copy"><div class="wrap">
+      <h1>Hey, I'm <span class="hl">Mesba.</span></h1>
+      <div class="mono"><span>Software · Analytics · Dota 2 caster</span><span class="dot"></span><span>MBA Business Analytics</span><span class="dot"></span><span>Ex: Hilti IT</span></div>
+    </div></div>
+    <div class="labels" id="labels"></div>
+    <div class="hint mono" id="hint">Drag to orbit · select a world</div>
+    <aside class="tour" id="tour" aria-live="polite" aria-label="Places">
+      <div class="tour-top mono"><span id="t-where"></span><b id="t-num"></b></div>
+      <h3 id="t-title"></h3>
+      <p id="t-body"></p>
+      <div class="tour-nav">
+        <button id="t-prev" aria-label="Previous place">←</button>
+        <div class="dots" id="t-dots"></div>
+        <button id="t-next" aria-label="Next place">→</button>
+      </div>
+    </aside>
+    <aside class="panel" id="panel" hidden aria-live="polite">
+      <div class="kind mono" id="p-kind"></div>
+      <h3 id="p-title"></h3>
+      <p id="p-body"></p>
+      <div class="row mono"><button id="p-back">← Back to Earth</button><a class="go" id="p-go" href="#">Open →</a></div>
+    </aside>
+  </div>
+
+  <section id="metavision" class="wrap" data-view="metavision">
+    <div class="eyebrow mono">Metavision</div>
+    <h2 class="big">An observer that <span class="hl">never blinks.</span></h2>
+    <p class="lede">Metavision is an automated observer for Dota 2 broadcasts. It reads the live match, decides where the story is,
+      frames every hero in the fight and moves the camera the way a professional observer would. The moment a human touches the
+      controls it hands over, and it picks up again when they let go. The name comes from Isagi's Metavision in <i>Blue Lock</i>:
+      seeing the whole field at once.</p>
+
+    <a class="live" href="https://www.twitch.tv/epc_en" target="_blank" rel="noopener">
+      <div class="live-head mono"><span class="rec"><i></i>Live</span><span>twitch.tv/epc_en ↗</span></div>
+      <div class="live-body">
+        <div>
+          <h3>Two months on air at <span class="hl">EPC.</span></h3>
+          <p>EPC is a European Dota 2 tournament with a $20,000 prize pool. Metavision has been running the camera on its broadcast, live, for two months straight.</p>
+        </div>
+        <div class="live-stats">
+          <div><b>2 mo</b><span>Live on stream</span></div>
+          <div><b>$20K</b><span>Prize pool</span></div>
+        </div>
+      </div>
+    </a>
+
+    <div class="pipe" aria-label="How Metavision works, animated">
+      <div class="nodes">
+        <div class="link"><div class="node">
+          <header><span class="t">Dota 2</span><span class="mono" style="color:var(--live)">● Live</span></header>
+          <div class="s mono">Game state · ~1 Hz</div>
+          <div class="bars" id="bars"></div>
+          <div class="s mono">10 heroes · items · Roshan · minimap</div>
+        </div><div class="wire"><i></i><i></i></div></div>
+
+        <div class="link"><div class="node">
+          <header><span class="t">Director</span><span class="mono s">Story score</span></header>
+          <div class="feed" id="feed"></div>
+        </div><div class="wire"><i></i><i></i></div></div>
+
+        <div class="link"><div class="node">
+          <header><span class="t">Framing</span><span class="mono s" id="zoom">Zoom −2</span></header>
+          <div class="frame" id="frame"><div class="box" id="box"></div></div>
+        </div><div class="wire"><i></i><i></i></div></div>
+
+        <div class="link"><div class="node">
+          <header><span class="t">Camera</span><span class="mono s">Minimap jump</span></header>
+          <div class="mini" id="mini"><div class="cam" id="cam"></div></div>
+          <div class="ok mono"><span>✓</span><span id="camtxt">On target</span></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="features">
+      <div><span class="mono">Reads the game</span><p>Valve's Game State Integration streams every hero, item, building and Roshan about once a second. Retail Dota has no remote console, so commands go in through config files and simulated input.</p></div>
+      <div><span class="mono">Finds the story</span><p>Detectors flag fights, ganks and objectives. A director ranks them, holds each shot long enough to read, and rotates through heroes when it's quiet.</p></div>
+      <div><span class="mono">Gets there first</span><p>It watches for smokes, teleports and blink initiations, so the camera is in place before the first hit lands.</p></div>
+      <div><span class="mono">Frames the fight</span><p>Centres on the action and zooms out notch by notch until every hero in it fits, in PimpmuckL's pimpcasting style.</p></div>
+      <div><span class="mono">Runs the show</span><p>Pre-game shots, a lane tour at the start, spectator stats like net worth and buyback, Showcase View during pauses, and instant replays through OBS.</p></div>
+      <div><span class="mono">Hands over</span><p>The moment the human observer moves, it steps back. When they stop, it picks up again.</p></div>
+    </div>
+
+    <div class="bench">
+      <div>
+        <div class="eyebrow mono">Benchmark</div>
+        <h3>Scored against a pro broadcast observer.</h3>
+        <p>Same replay, same 50 minutes: BLAST Slam VIII, OG vs BetBoom, measured against the camera of the English broadcast's observer.</p>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th></th><th class="mono">Broadcast</th><th class="mono hl">Metavision</th></tr></thead>
+          <tbody>
+            <tr><td>On the fight at the first hit</td><td>87%</td><td>94%</td></tr>
+            <tr><td>At an objective within 3 s</td><td>90%</td><td>100%</td></tr>
+            <tr><td>Fight time on screen</td><td>95%</td><td>98%</td></tr>
+            <tr><td>Deaths on camera</td><td>96%</td><td>93%</td></tr>
+          </tbody>
+        </table>
+        <div class="note mono">Metavision 1.9 build · 31 fights · 10 objectives · 46 deaths</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="casting" data-view="casting">
+    <div class="onair"><div class="wrap">
+      <div class="eyebrow mono">Casting</div>
+      <h2 class="big">On the mic <span class="hl">for EPC.</span></h2>
+      <p class="lede">I cast for EPC and write the prep myself: stats, storylines and player profiles. Metavision runs the camera on the same broadcast.</p>
+      <div class="wave" id="wave" aria-hidden="true"></div>
+    </div></div>
+  </section>
+
+  <section id="work" class="wrap" data-view="work">
+    <div class="eyebrow mono">Projects</div>
+    <h2 class="big">Everything else <span class="hl">in orbit.</span></h2>
+    <div class="list">
+      <article class="item"><span class="n mono">02</span><span class="k mono">Desktop app</span><h3>Cabel</h3>
+        <p>A desktop chat app shaped like Discord: servers, text and voice channels, roles and permissions. The installer is 2.1 MB, and voice runs peer-to-peer through an elected host.</p>
+        <div class="stack mono">Tauri · Rust · TypeScript · Supabase</div></article>
+      <article class="item"><span class="n mono">03</span><span class="k mono">Education</span><h3>SQLearn</h3>
+        <p>A PostgreSQL course that runs in the browser. Every exercise is graded on correctness and on EXPLAIN cost against a reference solution.</p>
+        <div class="stack mono">React · PGlite (WASM) · Supabase</div></article>
+      <article class="item"><span class="n mono">04</span><span class="k mono">Casting</span><h3>EPC Caster Books</h3>
+        <p>Data-driven prep for the EPC league, Seasons 2 and 3: player and team profiles, storylines and playoff reports, built by a pipeline.</p>
+        <div class="stack mono">Python · Stats · Broadcast prep</div></article>
+      <article class="item"><span class="n mono">05</span><span class="k mono">Mobile</span><h3>Fyytness</h3>
+        <p>A native Android fitness tracker for meals, body measurements, steps and workouts. It works offline first and syncs to the cloud.</p>
+        <div class="stack mono">Kotlin · Jetpack Compose · Room · Firebase</div></article>
+    </div>
+  </section>
+
+  <section id="about" class="wrap" data-view="about">
+    <div class="eyebrow mono">About</div>
+    <h2 class="big">From SAP code to <span class="hl">business strategy.</span></h2>
+    <p class="lede">I started out writing ABAP in production at Hilti, and moved from computer science into an MBA in Business Analytics. Now I'm heading toward consulting and technical product work, where I can turn hard problems into plain decisions.</p>
+    <div class="rows">
+      <div><div class="when mono">Next</div><div><h3>WellDev<span class="badge">Ready to join</span></h3><div class="where">Software engineering</div></div></div>
+      <div><div class="when mono">2025 — 2026</div><div><h3>MBA, Business Analytics</h3><div class="where">Asia Pacific University of Technology and Innovation · CGPA 3.62</div></div></div>
+      <div><div class="when mono">Apr — Dec 2023</div><div><h3>Software Engineer Intern, Finance &amp; Controlling IT</h3><div class="where">Hilti Asia IT Services · Kuala Lumpur</div>
+        <ul><li>ABAP for SAP from Jira and ServiceNow tickets: reports, Data Dictionary objects, function modules, the ILM framework and SAP Notes.</li>
+            <li>Designed and ran a training programme that taught non-ABAP colleagues to debug simple ABAP programs.</li>
+            <li>Production release documentation and transport management.</li></ul></div></div>
+      <div><div class="when mono">2020 — 2023</div><div><h3>BSc (Hons) Computer Science, AI &amp; Data Science</h3><div class="where">Taylor's University · CGPA 3.72 · Dean's List ×4</div>
+        <ul><li>Real-time ASL sign detection (TensorFlow, transfer learning), a facial emotion CNN with ESRGAN enhancement, and a hospital SQL database generator.</li></ul></div></div>
+    </div>
+  </section>
+
+  <section class="wrap contact" data-view="about">
+    <div class="eyebrow mono">Contact</div>
+    <h2 class="big">Let's build something <span class="hl">worth explaining.</span></h2>
+    <a class="mail mono" href="mailto:mesbahrahman001@gmail.com">Say hi: mesbahrahman001@gmail.com ↗</a>
+  </section>
+  <div class="pager wrap" id="pager" role="navigation" aria-label="More pages" hidden></div>
+</main>
+
+<footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur</div></footer>
+
+<!-- pages: hash routing, one view at a time -->
+<script>
+(() => {
+  const PAGES = [['', 'Home'], ['metavision', 'Metavision'], ['casting', 'Casting'], ['work', 'Work'], ['about', 'About']];
+  const ids = PAGES.map(p => p[0]);
+  const pager = document.getElementById('pager');
+  function route() {
+    const id = location.hash.slice(1), page = ids.includes(id) ? id : '';
+    const view = page || 'home';
+    document.querySelectorAll('[data-view]').forEach(v => {
+      v.hidden = v.dataset.view !== view;
+      if (!v.hidden) { v.classList.remove('view-in'); void v.offsetWidth; v.classList.add('view-in'); }
+    });
+    document.querySelectorAll('nav .links a[href^="#"]').forEach(a =>
+      a.getAttribute('href') === '#' + page ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+    const i = ids.indexOf(page), prev = PAGES[i - 1], next = PAGES[i + 1];
+    pager.hidden = !page;
+    pager.innerHTML = (prev ? `<a href="#${prev[0]}">← ${prev[1]}</a>` : '') + (next ? `<a href="#${next[0]}">${next[1]} →</a>` : '');
+    scrollTo({ top: 0, behavior: 'instant' });
+    if (!page) dispatchEvent(new Event('resize'));   // the 3D scene may have been resized while hidden
+  }
+  addEventListener('hashchange', route);
+  route();
+})();
+</script>
+
+<!-- pipeline-node animation (plain DOM) -->
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const bars = document.getElementById('bars');
+  for (let i = 0; i < 18; i++) bars.innerHTML += `<span style="animation-delay:${(i * 137 % 1000) / 1000}s"></span>`;
+  const wave = document.getElementById('wave');
+  for (let i = 0; i < 64; i++) wave.innerHTML += `<span style="height:${20 + (i * 53 % 80)}%;animation-delay:${(i * 89 % 1100) / 1000}s"></span>`;
+
+  const events = [
+    ['Teamfight', 'Radiant jungle · 4v3', 92, [[.3,.35],[.38,.42],[.34,.55],[.45,.48],[.4,.3]], [.32,.62]],
+    ['Roshan', 'Aegis contested', 88, [[.6,.4],[.68,.45],[.64,.32],[.72,.38],[.58,.5]], [.55,.42]],
+    ['Gank', 'Mid lane · smoke', 74, [[.48,.52],[.55,.5],[.52,.6]], [.5,.5]],
+    ['Tower', 'Dire bot T2 falling', 70, [[.75,.7],[.8,.66],[.7,.75],[.84,.74]], [.82,.8]],
+    ['Pick-off', 'Dire safe lane', 66, [[.2,.25],[.27,.2]], [.2,.2]],
+  ];
+  const colors = ['#5eead4','#60a5fa','#a78bfa','#f472b6','#fbbf24'];
+  const frame = document.getElementById('frame'), box = document.getElementById('box');
+  const dots = colors.map(c => { const d = document.createElement('div'); d.className = 'h'; d.style.background = c; d.style.boxShadow = `0 0 8px ${c}`; frame.appendChild(d); return d; });
+  const feed = document.getElementById('feed'), cam = document.getElementById('cam'), camtxt = document.getElementById('camtxt'), zoom = document.getElementById('zoom');
+  let k = 0;
+  function step() {
+    const [kind, where, score, heroes, mm] = events[k++ % events.length];
+    feed.insertAdjacentHTML('afterbegin', `<div><b>${score}</b> ${kind} · ${where}</div>`);
+    while (feed.children.length > 5) feed.lastChild.remove();
+    dots.forEach((d, i) => {
+      const h = heroes[i];
+      d.style.opacity = h ? 1 : 0;
+      if (h) { d.style.left = h[0] * 100 + '%'; d.style.top = h[1] * 100 + '%'; }
+    });
+    const xs = heroes.map(h => h[0]), ys = heroes.map(h => h[1]), pad = .08;
+    const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+    Object.assign(box.style, { left: x0 * 100 + '%', top: y0 * 100 + '%', width: (x1 - x0) * 100 + '%', height: (y1 - y0) * 100 + '%' });
+    zoom.textContent = 'Zoom −' + Math.max(1, Math.round((x1 - x0) * 10));
+    cam.style.left = mm[0] * 100 + '%'; cam.style.top = (1 - mm[1]) * 100 + '%';
+    camtxt.textContent = `Jump (${Math.round(mm[0] * 100)}, ${Math.round(mm[1] * 100)})`;
+  }
+  step();
+  if (!reduce) setInterval(step, 2600);
+})();
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "topojson-client": "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const stage = document.getElementById('space');
+const canvas = stage.querySelector('canvas');
+const sunGlow = document.getElementById('sunglow');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 400);
+const OVERVIEW = new THREE.Vector3(0.4, 2.6, 10.5);    // the opening wide shot, before the camera flies in to the tour
+camera.position.copy(OVERVIEW);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false;
+canvas.style.touchAction = 'pan-y';           // OrbitControls sets 'none'; keep page scroll on phones
+
+// ---- sun: one light source, everything is lit from it ----
+const SUN_DIR = new THREE.Vector3(9, 2.5, 3.2).normalize();   // set every frame from the real time of day (updateSun)
+const sunLight = new THREE.DirectionalLight(0xfff1dc, 3.2);
+sunLight.position.copy(SUN_DIR).multiplyScalar(50);
+scene.add(sunLight, new THREE.AmbientLight(0x223355, 0.06));
+
+function glowTexture(stops) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'), grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  stops.forEach(([o, col]) => grd.addColorStop(o, col));
+  g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const sunPos = SUN_DIR.clone().multiplyScalar(70);
+const sun = new THREE.Mesh(new THREE.SphereGeometry(2.2, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5, 3.6), toneMapped: false }));
+sun.position.copy(sunPos);
+const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(255,240,210,1)'], [.15, 'rgba(255,200,120,.55)'], [.4, 'rgba(255,150,60,.12)'], [1, 'rgba(255,120,40,0)']]),
+  blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+corona.scale.setScalar(34); corona.position.copy(sunPos);
+scene.add(sun, corona);
+
+// ---- stars ----
+{
+  const n = 2600, p = new Float32Array(n * 3), c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(140 + Math.random() * 60);
+    p.set([v.x, v.y, v.z], i * 3);
+    const b = .4 + Math.random() * .6, warm = Math.random();
+    c.set([b, b * (.9 + warm * .1), b * (.85 + (1 - warm) * .25)], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.45, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: .9 })));
+}
+
+// ---- Earth: procedural shader, lit by the sun ----
+const NOISE = /* glsl */`
+  float hash(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+  float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
+    return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
+  float fbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < 6; i++) { s += a * noise(p); p = p * 2.03 + 11.7; a *= .5; } return s; }`;
+const VERT = /* glsl */`
+  varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+  void main(){ vObj = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vUv = uv;
+    vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+const sunU = { value: SUN_DIR }, timeU = { value: 0 };
+// The Metavision moon mirrors sunlight onto Earth's night side. uSpot: direction Earth -> centre of the spotlight,
+// uMoonK: 0..1, spotlight strength (fades between stops), uSpotR: spotlight radius in radians, uHeroK: hero dots on/off.
+const spotU = { value: new THREE.Vector3(-1, 0, 0) }, moonK = { value: 0 }, spotR = { value: .3 }, heroK = { value: 0 };
+// the visitor: a marker where their timezone says they are
+const youU = { value: new THREE.Vector3() }, youK = { value: 0 };
+// five heroes wandering inside the moonlit patch, like players in an observer's shot
+const HERO_COLORS = ['#5eead4', '#60a5fa', '#a78bfa', '#f472b6', '#fbbf24'].map(c => new THREE.Color(c));
+const heroDirs = HERO_COLORS.map(() => new THREE.Vector3());
+const hT = new THREE.Vector3(), hB = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+function moveHeroes(t) {
+  const m = spotU.value;
+  hT.crossVectors(m, Math.abs(m.y) > .98 ? new THREE.Vector3(1, 0, 0) : UP).normalize();   // never a zero vector (NaN flashes black through bloom)
+  hB.crossVectors(hT, m);
+  heroDirs.forEach((h, i) => {
+    const x = Math.sin(t * .23 + i * 1.7) * .14 + Math.sin(t * .51 + i * 3.1) * .06;
+    const y = Math.cos(t * .19 + i * 2.3) * .13 + Math.cos(t * .43 + i) * .05;
+    h.copy(m).addScaledVector(hT, x).addScaledVector(hB, y).normalize();
+  });
+}
+
+// ---- real countries: Natural Earth (public domain, via world-atlas) drawn into the globe's texture ----
+// The map is data, not colour: R land, G places I've been, B borders. A second mask holds the current stop's countries.
+const MAP_W = innerWidth < 700 ? 2048 : 4096, MAP_H = MAP_W / 2;
+const mapCanvas = Object.assign(document.createElement('canvas'), { width: MAP_W, height: MAP_H });
+const hlCanvas = Object.assign(document.createElement('canvas'), { width: MAP_W / 2, height: MAP_H / 2 });
+const mapTex = new THREE.CanvasTexture(mapCanvas), hlTex = new THREE.CanvasTexture(hlCanvas);
+mapTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+const hasMapU = { value: 0 };
+const VISITED = ['Samoa', 'Bangladesh', 'Malaysia'];
+let shapes = null;                                   // country name -> GeoJSON geometry
+function trace(g, geo, W, H) {
+  const polys = geo.type === 'Polygon' ? [geo.coordinates] : geo.coordinates;
+  for (const poly of polys) for (const ring of poly) {
+    // keep rings that cross the antimeridian continuous, then also draw them a world-width left and right
+    const polar = ring.some(q => Math.abs(q[1]) > 89.9);   // Antarctica runs along the map edge: leave it as is
+    let prev = ring[0][0], off = 0;
+    const pts = ring.map(([lon, lat]) => {
+      if (!polar) { if (lon - prev > 180) off -= 360; else if (lon - prev < -180) off += 360; }
+      prev = lon;
+      return [(lon + off + 180) / 360 * W, (90 - lat) / 180 * H];
+    });
+    for (const dx of [-W, 0, W]) { g.moveTo(pts[0][0] + dx, pts[0][1]); for (const [x, y] of pts) g.lineTo(x + dx, y); g.closePath(); }
+  }
+}
+function fillShapes(g, names, W, H) {
+  g.beginPath();
+  for (const n of names) { const geo = shapes.get(n); geo ? trace(g, geo, W, H) : console.warn('no map shape for', n); }
+  g.fill('evenodd');
+}
+async function loadMap() {
+  try {
+    const [{ feature }, topo] = await Promise.all([import('topojson-client'),
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json').then(r => r.json())]);
+    shapes = new Map(feature(topo, topo.objects.countries).features.filter(f => f.geometry).map(f => [f.properties.name, f.geometry]));
+    const g = mapCanvas.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, MAP_W, MAP_H);
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = '#f00'; fillShapes(g, shapes.keys(), MAP_W, MAP_H);
+    g.fillStyle = '#0f0'; fillShapes(g, VISITED, MAP_W, MAP_H);
+    g.strokeStyle = '#00f'; g.lineWidth = MAP_W / 4096 * 1.2;
+    g.beginPath(); shapes.forEach(geo => trace(g, geo, MAP_W, MAP_H)); g.stroke();
+    mapTex.needsUpdate = true; hasMapU.value = 1;
+    drawHighlight();
+  } catch (e) { console.warn('country map unavailable, keeping the procedural Earth', e); }
+}
+function drawHighlight() {
+  const g = hlCanvas.getContext('2d'), W = hlCanvas.width, H = hlCanvas.height;
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  if (shapes) { g.fillStyle = '#fff'; fillShapes(g, STOPS[tour.i].countries, W, H); }
+  hlTex.needsUpdate = true;
+}
+
+const earthMat = new THREE.ShaderMaterial({
+  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
+              uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU },
+  vertexShader: VERT,
+  fragmentShader: NOISE + /* glsl */`
+    uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
+    uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
+    varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+    void main(){
+      vec3 N = normalize(vN), L = normalize(uSun), V = normalize(cameraPosition - vW);
+      vec4 mp = texture2D(uMap, vUv);
+      float n = fbm(vObj * 1.8 + vec3(1.7, .3, 4.1));
+      float detail = fbm(vObj * 9.);
+      float lat = abs(vObj.y);
+      // real coastlines once the map has loaded, procedural continents until then
+      float land = mix(smoothstep(.505, .53, n), smoothstep(.25, .75, mp.r), uHasMap);
+      float coast = smoothstep(.47, .505, n) * (1. - land) * (1. - uHasMap);
+      vec3 ocean = mix(vec3(.003, .018, .06), vec3(.01, .06, .15), detail) + coast * vec3(.0, .05, .07);
+      vec3 green = mix(vec3(.03, .08, .02), vec3(.07, .12, .04), detail);
+      vec3 desert = vec3(.28, .21, .11);
+      float dry = mix(smoothstep(.2, .45, 1. - lat) * smoothstep(.55, .62, n + detail * .15),
+                      exp(-(lat - .4) * (lat - .4) * 60.) * smoothstep(.42, .58, n), uHasMap);   // deserts sit near 25° N/S
+      vec3 alb = mix(ocean, mix(green, desert, dry), land);
+      float ice = smoothstep(.88, .94, lat + (detail - .5) * .12);
+      alb = mix(alb, vec3(.75, .8, .85), ice);
+
+      float NdL = dot(N, L);
+      vec3 col = alb * max(NdL, 0.) * 1.7;
+      // terminator: warm scattered band where day meets night
+      col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land);
+      // sun glint on water + bright subsolar spot
+      vec3 H = normalize(L + V + 1e-5);
+      float water = (1. - land) * (1. - ice);
+      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * vec3(1., .9, .75) * step(0., NdL);
+      col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
+      // city lights on the night side
+      float night = smoothstep(.12, -.18, NdL);
+      float cities = smoothstep(.72, .92, noise(vObj * 160.)) * smoothstep(.45, .7, noise(vObj * 12.));
+      col += land * (1. - ice) * night * cities * vec3(1., .62, .28) * 1.6;
+      // moonlight: sunlight bounced off the Metavision moon lights up a patch of the dark side
+      float m = acos(clamp(dot(N, normalize(uSpot)), -1., 1.));
+      float area = smoothstep(uSpotR, uSpotR * .35, m) * uMoonK;
+      float mlit = area * night;
+      col += (alb * vec3(3.2, 3.4, 4.2) + vec3(.012, .016, .04)) * mlit;   // cool, moonlit tint
+      // places I've been: a faint accent tint, always on; borders show up in the moonlight
+      vec3 ACC = vec3(.45, .4, 1.);
+      col += (mp.g * ACC * .03 + mp.b * mlit * vec3(.55, .6, 1.) * .35) * uHasMap;
+      // the current stop's countries light up in the accent colour, strongest inside the spotlight
+      col += texture2D(uHl, vUv).r * uHasMap * ACC * (.03 + area * .5);
+      // thin blue limb on the lit side
+      float fres = pow(clamp(1. - dot(N, V), 0., 1.), 3.5);   // clamp: rounding can push dot(N,V) past 1, and pow(<0) is NaN on Chrome/ANGLE
+      col += fres * vec3(.25, .5, 1.) * smoothstep(-.25, .5, NdL) * 1.4;
+      gl_FragColor = vec4(col, 1.);
+    }`
+});
+// axial tilt on a parent, spin on the Earth itself, so the axis stays put while it turns
+const earthTilt = new THREE.Group();
+earthTilt.rotation.z = 0.41;
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), earthMat);
+earthTilt.add(earth);
+scene.add(earthTilt);
+
+const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE.ShaderMaterial({
+  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR }, transparent: true, depthWrite: false,
+  vertexShader: VERT,
+  fragmentShader: NOISE + /* glsl */`
+    uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
+    varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 N = normalize(vN), L = normalize(uSun);
+      float c = fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006));
+      float a = smoothstep(.5, .72, c) * .85;
+      float lit = max(dot(N, L), 0.);
+      float area = smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK;
+      float mlit = area * smoothstep(.1, -.15, dot(N, L));
+      vec3 col = vec3(.95) * (lit * 1.05 + .01) + exp(-dot(N, L) * dot(N, L) * 49.) * vec3(.6, .25, .08) * .2
+               + vec3(.5, .55, .75) * mlit * .7;
+      // clear skies under the spotlight, so the country underneath shows
+      gl_FragColor = vec4(col, a * max(.15 + .85 * smoothstep(-.2, .2, dot(N, L)), mlit) * (1. - area * .8));
+    }`
+}));
+earth.add(clouds);
+
+// the moonlit section's thin rim (like an observer's frame) and the heroes in it, on a shell above the clouds
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.018, 96, 48), new THREE.ShaderMaterial({
+  uniforms: { uSpot: spotU, uMoonK: moonK, uSpotR: spotR, uHeroK: heroK, uHeroes: { value: heroDirs }, uHeroCol: { value: HERO_COLORS },
+              uYou: youU, uYouK: youK, uTime: timeU },
+  transparent: true, depthWrite: false,
+  vertexShader: VERT,
+  fragmentShader: /* glsl */`
+    uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR; uniform float uHeroK; uniform vec3 uHeroes[5]; uniform vec3 uHeroCol[5];
+    uniform vec3 uYou; uniform float uYouK; uniform float uTime;
+    varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 N = normalize(vN);
+      float d = acos(clamp(dot(N, normalize(uSpot)), -1., 1.));
+      vec3 col = vec3(.75, .78, 1.);
+      float a = exp(-(d - uSpotR) * (d - uSpotR) * 12100.) * .6;
+      for (int i = 0; i < 5; i++) {
+        float h = acos(clamp(dot(N, uHeroes[i]), -1., 1.));
+        float edge = smoothstep(.04, .032, h) * uHeroK, core = smoothstep(.03, .022, h) * uHeroK;
+        col = mix(col, vec3(.01), edge * (1. - core));      // dark outline so dots read on clouds
+        col = mix(col, uHeroCol[i] * 1.3, core);
+        a = max(a, edge);
+      }
+      a *= uMoonK;
+      // the visitor: a green dot with a slow ping
+      float y = acos(clamp(dot(N, uYou), -1., 1.)), yr = fract(uTime * .45) * .09;
+      float you = (smoothstep(.016, .01, y) + exp(-(y - yr) * (y - yr) * 40000.) * (1. - yr / .09) * .8) * uYouK;
+      col = mix(col, vec3(.35, 1., .7), you); a = max(a, you);
+      gl_FragColor = vec4(col, a);
+    }`
+})));
+
+// the reflected beam: a faint cone from the moon to the patch it lights
+const beam = new THREE.Mesh(new THREE.CylinderGeometry(.15, .42, 1, 48, 1, true), new THREE.ShaderMaterial({
+  uniforms: { uMoonK: moonK }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  vertexShader: /* glsl */`
+    varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+    void main(){ vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz;
+      gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: /* glsl */`
+    uniform float uMoonK; varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+    void main(){
+      float f = pow(abs(dot(normalize(vN), normalize(cameraPosition - vW))), 3.);   // soft edges
+      float a = f * (.018 + .03 * vUv.y) * uMoonK;                                  // a touch brighter at the moon
+      gl_FragColor = vec4(vec3(.62, .66, 1.) * a, 1.);
+    }`
+}));
+scene.add(beam);
+
+const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 48), new THREE.ShaderMaterial({
+  uniforms: { uSun: sunU }, side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: VERT,
+  fragmentShader: /* glsl */`
+    uniform vec3 uSun; varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+    void main(){
+      vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
+      float rim = pow(clamp(1. + dot(N, V) * 1.0, 0., 1.), 4.);   // BackSide: strongest at the limb
+      float lit = smoothstep(-.35, .6, dot(N, normalize(uSun)));
+      gl_FragColor = vec4(vec3(.3, .58, 1.) * rim * lit * .9, 1.);
+    }`
+}));
+scene.add(atmo);
+
+// ---- the moon: a 3D Metavision logo, lit by the sun ----
+function seg(r0, r1, a0, a1) {
+  const s = new THREE.Shape();
+  s.absarc(0, 0, r1, a0, a1, false); s.absarc(0, 0, r0, a1, a0, true);
+  return s;
+}
+function logoGeometry() {
+  const shapes = [], gap = 0.07;
+  [[.2, .43, 6, 0], [.48, .7, 8, .25], [.75, .93, 10, .1]].forEach(([r0, r1, n, off]) => {
+    for (let i = 0; i < n; i++) {
+      const a0 = off + i * Math.PI * 2 / n + gap / 2, a1 = off + (i + 1) * Math.PI * 2 / n - gap / 2;
+      shapes.push(seg(r0, r1, a0, a1));
+    }
+  });
+  const outer = new THREE.Shape(); outer.absarc(0, 0, 1, 0, Math.PI * 2);
+  const hole = new THREE.Path(); hole.absarc(0, 0, .965, 0, Math.PI * 2, true); outer.holes.push(hole);
+  shapes.push(outer);
+  const g = new THREE.ExtrudeGeometry(shapes, { depth: .16, bevelEnabled: true, bevelThickness: .03, bevelSize: .015, bevelSegments: 3, curveSegments: 24 });
+  g.center();
+  // degenerate bevel triangles get NaN normals; NaN lighting turns into flashing black blocks through bloom
+  const nrm = g.attributes.normal.array;
+  for (let i = 0; i < nrm.length; i += 3) {
+    if (!(Number.isFinite(nrm[i]) && Number.isFinite(nrm[i + 1]) && Number.isFinite(nrm[i + 2])) || nrm[i] ** 2 + nrm[i + 1] ** 2 + nrm[i + 2] ** 2 < 1e-6) {
+      nrm[i] = 0; nrm[i + 1] = 0; nrm[i + 2] = 1;
+    }
+  }
+  return g;
+}
+const moon = new THREE.Group();
+const logo = new THREE.Mesh(logoGeometry(), new THREE.MeshStandardMaterial({ color: 0x9d9ab8, metalness: .7, roughness: .5, emissive: 0x1a1640, emissiveIntensity: .4,
+  envMap: new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), .04).texture, envMapIntensity: .35 }));
+logo.scale.setScalar(.42);
+moon.add(logo);
+scene.add(moon);
+
+// ---- other projects: planets on wider orbits ----
+function planetTexture(c1, c2, banded, seed) {
+  const W = 256, H = 128, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d'), a = new THREE.Color(c1), b = new THREE.Color(c2);
+  let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const ph = [rnd() * 6, rnd() * 6, rnd() * 6];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const u = x / W * Math.PI * 2, v = y / H;
+    let t = banded
+      ? .5 + .5 * Math.sin(v * 22 + Math.sin(u * 2 + ph[0]) * .8 + Math.sin(v * 7 + ph[1]) * 2)
+      : .5 + .25 * Math.sin(u * 3 + ph[0] + Math.sin(v * 9) * 2) + .25 * Math.sin(v * 13 + Math.cos(u * 5 + ph[2]));
+    const c = a.clone().lerp(b, Math.min(1, Math.max(0, t)));
+    g.fillStyle = `rgb(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0})`; g.fillRect(x, y, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+
+const PROJECTS = [
+  { id: 'cabel', name: 'Cabel', kind: 'Desktop app', c: ['#1e3a8a', '#7dd3fc'], banded: true, r: .32, d: 4.6, a: 4.2, sp: .035,
+    body: 'A desktop chat app shaped like Discord, built on Tauri. Servers, voice channels, roles. The installer is 2.1 MB.' },
+  { id: 'sqlearn', name: 'SQLearn', kind: 'Education', c: ['#064e3b', '#6ee7b7'], banded: false, r: .26, d: 6, a: 5.6, sp: .022,
+    body: 'A Postgres course in the browser, graded on correctness and on EXPLAIN cost.' },
+  { id: 'epc', name: 'EPC Books', kind: 'Casting', c: ['#500724', '#f9a8d4'], banded: true, r: .3, d: 7.4, a: .2, sp: .015,
+    body: 'Data-driven caster prep for EPC Seasons 2 and 3, built by a pipeline.' },
+  { id: 'fyytness', name: 'Fyytness', kind: 'Mobile', c: ['#1a2e05', '#bef264'], banded: false, r: .24, d: 8.8, a: 2.1, sp: .01,
+    body: 'An offline-first Android fitness tracker. Kotlin, Compose, Room, Firebase.' },
+];
+PROJECTS.forEach((p, i) => {
+  p.tilt = (i % 2 ? 1 : -1) * (.05 + (i * .037) % .12);
+  p.mesh = new THREE.Mesh(new THREE.SphereGeometry(p.r, 48, 24),
+    new THREE.MeshStandardMaterial({ map: planetTexture(p.c[0], p.c[1], p.banded, 97 + i * 31), roughness: .85, metalness: 0 }));
+  scene.add(p.mesh);
+  const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * p.d, 0, Math.sin(a) * p.d)); }
+  const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .06 }));
+  ring.rotation.x = p.tilt; scene.add(ring);
+});
+function orbitPos(d, a, tilt, out) { return out.set(Math.cos(a) * d, 0, Math.sin(a) * d).applyAxisAngle(new THREE.Vector3(1, 0, 0), tilt); }
+
+// ---- worlds: what can be focused ----
+const WORLDS = [
+  { id: 'earth', name: 'Earth · Me', kind: 'Kuala Lumpur', obj: earth, r: 1, href: '#about',
+    body: 'MD Mesbahur Rahman. I have a BSc in Computer Science (AI & Data Science) and an MBA in Business Analytics, and I wrote production SAP code at Hilti. I build tools and cast Dota 2. Everything here orbits that.' },
+  { id: 'metavision', name: 'Metavision', kind: 'Dota 2 broadcasting', obj: moon, r: .42, href: '#metavision', cls: 'moon',
+    body: 'An automated observer for Dota 2 broadcasts. It reads the live game, finds the story, frames the fight and moves the camera like a pro observer would. Live on the EPC broadcast for two months.' },
+  ...PROJECTS.map(p => ({ id: p.id, name: p.name, kind: p.kind, obj: p.mesh, r: p.r, href: '#work', body: p.body })),
+];
+
+// labels (accessible buttons)
+const labelsEl = document.getElementById('labels');
+WORLDS.forEach(w => {
+  const b = document.createElement('button');
+  b.className = 'pill' + (w.cls ? ' ' + w.cls : ''); b.textContent = w.name + ' →'; b.setAttribute('aria-pressed', 'false');
+  b.onclick = () => focusOn(w);
+  labelsEl.appendChild(b); w.label = b;
+});
+
+// panel
+const panel = document.getElementById('panel');
+const heroCopy = document.querySelector('.hero-copy');
+const $ = id => document.getElementById(id);
+$('p-back').onclick = () => focusOn(null);
+
+let focus = null, flying = false;
+function focusOn(w) {
+  if (w && spotSel) { spotSel = false; tour.auto = !reduce; placePill.setAttribute('aria-pressed', 'false'); }   // heroCopy is handled just below
+  focus = w; flying = true;
+  WORLDS.forEach(x => x.label.setAttribute('aria-pressed', String(x === w)));
+  heroCopy.style.opacity = w ? 0 : 1;
+  $('tour').hidden = $('hint').hidden = !!w;
+  if (!w) { panel.hidden = true; return; }
+  $('p-kind').textContent = w.kind; $('p-title').textContent = w.name.replace(' · Me', '');
+  $('p-body').textContent = w.body; $('p-go').href = w.href;
+  panel.hidden = false;
+}
+controls.addEventListener('start', () => { flying = false; });
+
+// click on a world in the scene
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let down = null;
+canvas.addEventListener('pointerdown', e => down = [e.clientX, e.clientY]);
+canvas.addEventListener('pointerup', e => {
+  if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
+  const r = canvas.getBoundingClientRect();
+  ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(WORLDS.map(w => w.obj), true)[0];
+  const onSpot = hit && (hit.object === earth || hit.object.parent === earth) && moonK.value > .4 &&
+    hit.point.clone().normalize().dot(spotU.value) > Math.cos(spotR.value);
+  if (onSpot) return selectSpot(true);
+  if (spotSel) selectSpot(false);
+  if (hit) focusOn(WORLDS.find(w => w.obj === hit.object || w.obj === hit.object.parent));
+});
+
+// ---- post: bloom so the sun, glint and moon edges glow ----
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+// guard: one NaN/Inf pixel gets smeared by bloom into big flashing black blocks, so zero them before bloom sees them
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv);
+      bool bad = !(c.r >= 0. && c.g >= 0. && c.b >= 0. && c.r < 1e4 && c.g < 1e4 && c.b < 1e4);   // false for NaN and Inf
+      gl_FragColor = bad ? vec4(0., 0., 0., 1.) : min(c, vec4(64.)); }`
+}));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .45, .4, .95);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+let stageW = 1, stageH = 1;
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;                          // hidden on another page
+  stageW = w; stageH = h;
+  renderer.setSize(w, h, false); composer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.fov = w < 700 ? 52 : 38;             // phones: pull back so Earth and moon fit
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+let visible = true;
+new IntersectionObserver(([e]) => visible = e.isIntersecting).observe(stage);
+
+// ---- loop ----
+const clock = new THREE.Clock(), tmp = new THREE.Vector3(), goal = new THREE.Vector3(), look = new THREE.Vector3();
+let motion = 1, viewShift = 0;
+// slow machine (e.g. no GPU acceleration)? after ~2s under 30 fps, drop bloom and render at lower resolution
+let perfFrames = 0, perfStart = 0;
+function adaptQuality(now) {
+  if (perfFrames < 0) return;
+  if (!perfStart) perfStart = now;
+  if (++perfFrames < 60) return;
+  const fps = perfFrames / ((now - perfStart) / 1000);
+  perfFrames = -1;
+  if (fps < 30) { bloom.enabled = false; renderer.setPixelRatio(.75); composer.setPixelRatio(.75); resize(); }
+}
+const D2R = Math.PI / 180;
+
+// ---- the tour: Metavision's spotlight visits the places that made me ----
+const EPC_COUNTRIES = ['Russia', 'Ukraine', 'Belarus', 'Moldova', 'Serbia', 'Greece', 'Sweden', 'Turkey', 'Lebanon', 'Jordan', 'Iran',
+  'Kazakhstan', 'Uzbekistan', 'Kyrgyzstan', 'Peru', 'Bolivia', 'Cuba'];   // this season's EPC rosters (EPC caster book)
+const STOPS = [
+  { title: 'Samoa', where: 'South Pacific', lat: -13.8, lon: -172.1, r: .13, countries: ['Samoa'],
+    body: 'In the middle of the South Pacific, about as far from everything else on this map as it gets.' },
+  { title: 'Bangladesh', where: 'South Asia', lat: 23.7, lon: 90.4, r: .16, countries: ['Bangladesh'],
+    body: 'Where I grew the most.' },
+  { title: 'Malaysia', where: 'Kuala Lumpur · 2020 — 2026', lat: 3.5, lon: 107, r: .2, countries: ['Malaysia'],
+    body: "A BSc in Computer Science (AI & Data Science) at Taylor's University, on the Dean's List four times. Then an MBA in Business Analytics at APU." },
+  { title: 'Hilti Asia IT Services', where: 'Kuala Lumpur · Apr — Dec 2023', lat: 3.14, lon: 101.69, r: .09, countries: ['Malaysia'],
+    body: 'Nine months in Finance & Controlling IT, writing ABAP for SAP that shipped to production, and teaching non-ABAP colleagues to debug it.' },
+  { title: 'EPC', where: 'Europe · on air', lat: 50, lon: 30, r: .36, countries: EPC_COUNTRIES, heroes: true,
+    body: "A European Dota 2 tournament with a $20,000 prize pool. I cast it and Metavision runs the camera. This season's 59 players come from 17 countries, from Peru to Kyrgyzstan." },
+  { title: 'WellDev', where: 'Next', lat: 47.37, lon: 8.54, r: .1, countries: ['Switzerland'],
+    body: 'Software engineering with Swiss roots and a team in Dhaka. The next stop on this map, and I am ready to join.' },
+];
+const DWELL = 9;                                     // seconds per stop
+const tour = { i: 0, want: 0, state: 'spin', next: Infinity, auto: !reduce };
+
+// the stage: where on the night side each stop is shown, where Metavision holds station, and where the camera sits
+const STAGE = new THREE.Vector3(-.4, .18, .9).normalize();
+const STATION = STAGE.clone().add(new THREE.Vector3(-.45, .5, .05)).normalize().multiplyScalar(2.55);
+const CAM_DIR = new THREE.Vector3(-.1, .3, 1).normalize();
+const stageAz = (() => { const v = STAGE.clone().applyQuaternion(earthTilt.quaternion.clone().invert()); return Math.atan2(v.x, v.z); })();
+function localDir(lat, lon, out) {                   // matches SphereGeometry's UVs: u = 0 at 180°W
+  const th = (90 - lat) * D2R, ph = (lon + 180) * D2R;
+  return out.set(-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th));
+}
+const stopLocal = new THREE.Vector3(), cand = new THREE.Vector3();
+let spinGoal = 0;
+
+const tourEl = $('tour'), dotsEl = $('t-dots');
+const placePill = Object.assign(document.createElement('button'), { className: 'pill place' });
+placePill.setAttribute('aria-pressed', 'false');
+placePill.onclick = () => selectSpot(!spotSel);
+labelsEl.appendChild(placePill);
+// selecting the spotlight flies the camera in to that place and holds the tour there; deselecting resumes it
+let spotSel = false;
+const finalT = new THREE.Vector3();
+function selectSpot(on) {
+  if (on && focus) focusOn(null);
+  spotSel = on; flying = true;
+  heroCopy.style.opacity = on ? 0 : 1;
+  tour.auto = !on && !reduce;
+  if (!on) tour.next = clock.elapsedTime + DWELL;
+  placePill.setAttribute('aria-pressed', String(on));
+}
+addEventListener('keydown', e => { if (e.key === 'Escape' && spotSel) selectSpot(false); });
+STOPS.forEach((st, i) => {
+  const b = document.createElement('button');
+  b.setAttribute('aria-label', st.title); b.onclick = () => goTo(i);
+  dotsEl.appendChild(b);
+});
+$('t-prev').onclick = () => goTo(tour.i - 1);
+$('t-next').onclick = () => goTo(tour.i + 1);
+
+function showStop(st) {
+  $('t-num').textContent = String(tour.i + 1).padStart(2, '0') + ' / ' + String(STOPS.length).padStart(2, '0');
+  $('t-where').textContent = st.where; $('t-title').textContent = st.title; $('t-body').textContent = st.body;
+  [...dotsEl.children].forEach((b, i) => {
+    i === tour.i ? b.setAttribute('aria-current', 'step') : b.removeAttribute('aria-current');
+    b.style.setProperty('--p', i < tour.i ? '100%' : '0%');
+  });
+  placePill.textContent = st.title;
+  tourEl.classList.remove('swap'); void tourEl.offsetWidth; tourEl.classList.add('swap');
+}
+function applyStop() {
+  const st = STOPS[tour.i];
+  localDir(st.lat, st.lon, stopLocal);
+  const d = stageAz - Math.atan2(stopLocal.x, stopLocal.z) - earth.rotation.y;
+  spinGoal = earth.rotation.y + Math.atan2(Math.sin(d), Math.cos(d));   // the shortest way round
+  spotR.value = st.r; heroK.value = st.heroes ? 1 : 0;
+  drawHighlight(); showStop(st);
+}
+function goTo(i) {
+  i = (i + STOPS.length) % STOPS.length;
+  if (i === tour.i && tour.state === 'in') return;
+  tour.want = i; tour.state = 'out';
+  if (spotSel) flying = true;
+}
+// light fades out, Earth turns the next place onto the stage, light fades back in
+function updateTour(t, dt) {
+  if (tour.state === 'out') {
+    moonK.value = Math.max(0, moonK.value - dt * 3);
+    if (!moonK.value) { tour.i = tour.want; applyStop(); tour.state = 'spin'; }
+  } else if (tour.state === 'spin') {
+    const d = spinGoal - earth.rotation.y;
+    earth.rotation.y += reduce ? d : d * (1 - Math.exp(-dt * 3.2));
+    if (Math.abs(d) < .01) { earth.rotation.y = spinGoal; tour.state = 'in'; tour.next = t + DWELL; }
+  } else {
+    moonK.value = Math.min(1, moonK.value + dt * 1.6);
+    const bar = dotsEl.children[tour.i];
+    bar.style.setProperty('--p', tour.auto ? Math.min(100, (1 - (tour.next - t) / DWELL) * 100) + '%' : '100%');
+    if (tour.auto && !focus && t > tour.next) goTo(tour.i + 1);
+  }
+}
+// ---- real time of day: the sun sits over the point on Earth where it is overhead right now ----
+// Earth and sun turn together (the slow spin, the tour), so day and night on the globe always match the clock.
+const sunLocal = new THREE.Vector3();
+function updateSun(now = new Date()) {
+  const day = (now - Date.UTC(now.getUTCFullYear(), 0, 0)) / 864e5;                       // day of the year
+  const decl = -23.44 * Math.cos(2 * Math.PI / 365 * (day + 10));                          // solar declination, degrees
+  const B = 2 * Math.PI * (day - 81) / 364;
+  const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);             // equation of time, minutes
+  const utc = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  localDir(decl, -15 * (utc - 12 + eot / 60), sunLocal);
+  SUN_DIR.copy(sunLocal).transformDirection(earth.matrixWorld);
+  sunLight.position.copy(SUN_DIR).multiplyScalar(50);
+  sunPos.copy(SUN_DIR).multiplyScalar(70); sun.position.copy(sunPos); corona.position.copy(sunPos);
+}
+
+// ---- the visitor, placed from the browser's timezone: no permission prompt, nothing sent anywhere ----
+const youLocal = new THREE.Vector3();
+const youPill = Object.assign(document.createElement('div'), { className: 'pill you' });
+labelsEl.appendChild(youPill);
+fetch('tz.json').then(r => r.json()).then(zones => {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone, c = zones[tz];
+  if (!c) return;
+  localDir(c[0], c[1], youLocal); youK.value = 1;
+  const city = tz.split('/').pop().replace(/_/g, ' ');
+  const label = () => youPill.textContent = `You · ${city} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  label(); setInterval(label, 20000);
+}).catch(() => {});
+
+applyStop();
+earth.rotation.y = spinGoal;                         // start already facing the first stop
+loadMap();
+// open on the wide shot, then fly in to the tour
+if (reduce) camera.position.copy(CAM_DIR).multiplyScalar(stageW < 700 ? 7.4 : 5.6);
+else setTimeout(() => { if (!focus) flying = true; }, 1400);
+
+function place(t) {
+  // the spotlight sits on the current stop wherever the Earth has turned it
+  earthTilt.updateMatrixWorld(true);
+  updateSun();
+  spotU.value.copy(stopLocal).transformDirection(earth.matrixWorld);
+  youU.value.copy(youLocal).transformDirection(earth.matrixWorld);
+  // Metavision holds station over the stage, drifting a little
+  moon.position.copy(STATION).applyAxisAngle(UP, Math.sin(t * .15) * .1);
+  // a mirror: the face normal bisects "to the sun" and "to the spot", so sunlight bounces onto that spot
+  const toSpot = cand.copy(spotU.value).sub(moon.position);
+  const len = toSpot.length(); toSpot.divideScalar(len);
+  look.copy(SUN_DIR).add(toSpot).normalize().add(moon.position);
+  moon.lookAt(look); logo.rotation.z = t * .25;
+  // beam from the spot on the surface up to the moon (+y of the cone is the narrow moon end)
+  beam.position.copy(spotU.value).addScaledVector(toSpot, -len / 2);
+  beam.scale.set(spotR.value / .42, len, spotR.value / .42);
+  beam.quaternion.setFromUnitVectors(UP, toSpot.negate());
+  PROJECTS.forEach(p => orbitPos(p.d, p.a, p.tilt, p.mesh.position));
+}
+function project(v, el, hide) {
+  tmp.copy(v).project(camera);
+  const off = tmp.z > 1 || hide;
+  el.style.opacity = off ? 0 : 1; el.style.pointerEvents = off ? 'none' : '';
+  el.style.transform = `translate(${(tmp.x * .5 + .5) * stage.clientWidth}px, ${(-tmp.y * .5 + .5) * stage.clientHeight}px)`;
+}
+function frame() {
+  requestAnimationFrame(frame);
+  if (!visible) { clock.getDelta(); return; }
+  const raw = clock.getDelta(), dt = Math.min(raw, .05), t = clock.elapsedTime;
+  timeU.value = t;
+  motion += ((focus || reduce ? 0 : 1) - motion) * Math.min(1, dt * 2);
+  clouds.rotation.y += dt * .01 * motion;
+  PROJECTS.forEach(p => p.a += dt * p.sp * motion);
+  updateTour(t, Math.min(raw, .25));                // real time, so transitions keep pace on slow machines
+  if (tour.state !== 'spin' && !spotSel) earth.rotation.y += dt * .025 * motion;   // slow spin (sun turns with it)
+  place(t);
+  moveHeroes(reduce ? 0 : t);
+
+  if (flying) {
+    const k = 1 - Math.exp(-dt * 2.6);
+    if (focus) {
+      const p = focus.obj.position;
+      // approach from the sunlit side, a little above, so the world is lit in the shot
+      goal.copy(p).add(tmp.copy(SUN_DIR).multiplyScalar(.45).add(camera.position.clone().sub(p).normalize()).normalize()
+        .multiplyScalar(focus.r * (focus.id === 'earth' ? 4.6 : 7) + .6)).add(new THREE.Vector3(0, focus.r * 1.2, 0));
+      controls.target.lerp(p, k);
+    } else if (spotSel) {
+      finalT.copy(stopLocal).applyAxisAngle(UP, tour.state === 'spin' ? spinGoal : earth.rotation.y).applyQuaternion(earthTilt.quaternion);
+      goal.copy(finalT).addScaledVector(CAM_DIR, .5).normalize().multiplyScalar((stageW < 700 ? 2.8 : 2.3) + spotR.value * 3);
+      controls.target.lerp(finalT, k);
+    } else { goal.copy(CAM_DIR).multiplyScalar(stageW < 700 ? 7.4 : 5.6); controls.target.lerp(new THREE.Vector3(), k); }
+    camera.position.lerp(goal, k);
+    if (camera.position.distanceTo(goal) < .01) flying = false;
+  } else if (focus) controls.target.copy(focus.obj.position);
+  controls.update();
+  // wide screens: shift the picture so Earth sits right of the headline and the tour card
+  viewShift += ((!focus && stageW >= 900 ? -.17 : 0) - viewShift) * Math.min(1, dt * 3);
+  camera.setViewOffset(stageW, stageH, viewShift * stageW, 0, stageW, stageH);
+
+  // labels sit just above each world
+  WORLDS.forEach(w => project(tmp.copy(w.obj.position).add(new THREE.Vector3(0, w.r + .18, 0)), w.label));
+  // the current place's label, pinned to the spotlight while it faces us
+  const sp = cand.copy(spotU.value).multiplyScalar(1.02), seen = sp.clone().normalize().dot(tmp.copy(camera.position).sub(sp).normalize());
+  project(sp, placePill, !!focus || moonK.value < .4 || seen < .15);
+  placePill.style.transform += ' translate(14px, -110%)';    // place label above, visitor label below
+  const yp = cand.copy(youU.value).multiplyScalar(1.02), ySeen = yp.clone().normalize().dot(tmp.copy(camera.position).sub(yp).normalize());
+  project(yp, youPill, !youK.value || !!focus || ySeen < .15);
+  youPill.style.transform += ' translate(14px, 10%)';
+  // the screen glow follows the real sun, so it is always on the side the light comes from
+  tmp.copy(sunPos).project(camera);
+  // fade by how directly we face the sun, so it never pops or flips when the sun passes behind the camera
+  const facing = camera.getWorldDirection(look).dot(SUN_DIR);
+  sunGlow.style.opacity = THREE.MathUtils.smoothstep(facing, .2, .6);
+  if (facing > .2) sunGlow.style.transform = `translate(${(tmp.x * .5 + .5) * stage.clientWidth}px, ${(-tmp.y * .5 + .5) * stage.clientHeight}px)`;
+
+  composer.render();
+  adaptQuality(performance.now());
+}
+frame();
+</script>
+</body>
+</html>

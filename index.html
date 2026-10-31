@@ -73,6 +73,13 @@
   .tour.swap h3, .tour.swap p, .tour.swap .tour-top span { animation: in .45s ease; }
   .traffic { margin-top: 10px; color: var(--sun); }
   .traffic[hidden] { display: none; }
+  .flights { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .flights[hidden] { display: none; }
+  .flights button { padding: 6px 8px; cursor: pointer; text-align: left; color: var(--muted); background: none; border: 1px solid var(--line);
+                    font: 500 11px/1.25 "IBM Plex Mono", monospace; letter-spacing: .04em; transition: border-color .2s, background .2s; }
+  .flights button b { display: block; color: var(--ink); font-weight: 500; }
+  .flights button:hover, .flights button:focus-visible { border-color: var(--accent); outline: none; }
+  .flights button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 18%, transparent); }
   .tour-nav { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
   .tour-nav > button { font: inherit; width: 34px; height: 34px; flex: none; cursor: pointer; color: var(--ink);
                        background: none; border: 1px solid var(--line); }
@@ -272,6 +279,7 @@
       <h3 id="t-title"></h3>
       <p id="t-body"></p>
       <div class="traffic mono" id="t-traffic" hidden></div>
+      <div class="flights" id="t-flights" role="group" aria-label="Switch flight" hidden></div>
       <div class="tour-nav">
         <button id="t-prev" aria-label="Previous place">←</button>
         <div class="dots" id="t-dots"></div>
@@ -1188,10 +1196,20 @@ function showStop(st) {
     b.style.setProperty('--p', i < tour.i ? '100%' : '0%');
   });
   placePill.textContent = st.title;
+  const fl = $('t-flights');
+  fl.hidden = !st.live || liveList.length < 2;
+  if (!fl.hidden) fl.replaceChildren(...liveList.map((a, i) => {
+    const b = document.createElement('button'), name = document.createElement('b');
+    name.textContent = a.cs;
+    b.append(name, `${a.t || 'Aircraft'} · ${Math.round(a.alt / 1000)}k ft`);
+    b.dataset.i = i; b.setAttribute('aria-pressed', String(!!livePlane && a.cs === livePlane.cs));
+    return b;
+  }));
   tourEl.classList.remove('swap'); void tourEl.offsetWidth; tourEl.classList.add('swap');
 }
 // ---- the live stop: a real aircraft cruising near the visitor (else over Bangladesh, else London) ----
 let livePlane = null, liveAt = -1e9, liveBusy = false;
+let liveList = [], liveWhere = '', liveFetchedAt = 0;  // the flights you can switch between on the live stop
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 async function fetchLivePlane() {
   liveBusy = true; livePlane = null;
@@ -1200,7 +1218,11 @@ async function fetchLivePlane() {
     try {
       const d = await (await fetch(`${FLIGHTS_URL}?lat=${lat}&lon=${lon}&r=250`)).json();
       const cruising = d.ac.filter(a => a.alt >= 20000 && a.gs >= 300 && a.cs).sort((a, b) => b.alt - a.alt);
-      if (cruising.length) { livePlane = { ...cruising[Math.floor(Math.random() * Math.min(5, cruising.length))], where }; break; }
+      if (cruising.length) {
+        liveList = cruising.slice(0, 6); liveWhere = where; liveFetchedAt = clock.elapsedTime;
+        livePlane = { ...liveList[Math.floor(Math.random() * Math.min(5, liveList.length))], where };
+        break;
+      }
     } catch { /* try the next place */ }
   }
   liveAt = clock.elapsedTime; liveBusy = false;
@@ -1226,6 +1248,18 @@ function followLive(dt) {                            // dead-reckon the plane; t
   planeGeo.attributes.position.setXYZ(0, stopLocal.x * 1.022, stopLocal.y * 1.022, stopLocal.z * 1.022);
   planeGeo.attributes.position.needsUpdate = true;
 }
+
+function switchFlight(i) {
+  if (!STOPS[tour.i].live || !liveList[i]) return;
+  const p = { ...liveList[i], where: liveWhere };
+  dest(p.lat, p.lon, p.trk, p.gs * 1.852 / 6371 / 3600 * (clock.elapsedTime - liveFetchedAt));   // positions are from the fetch
+  p.lat = ll[0]; p.lon = ll[1];
+  livePlane = p;
+  tour.hold = 30;                                    // stay with the flight you picked for a while
+  applyStop(); tour.state = 'spin';
+  if (spotSel) flying = true;
+}
+$('t-flights').onclick = e => { const b = e.target.closest('button'); if (b) switchFlight(+b.dataset.i); };
 
 function applyStop() {
   const st = STOPS[tour.i];
@@ -1256,11 +1290,11 @@ function updateTour(t, dt) {
   } else if (tour.state === 'spin') {
     const d = spinGoal - earth.rotation.y;
     earth.rotation.y += reduce ? d : d * (1 - Math.exp(-dt * 3.2));
-    if (Math.abs(d) < .01) { earth.rotation.y = spinGoal; tour.state = 'in'; tour.next = t + DWELL; }
+    if (Math.abs(d) < .01) { earth.rotation.y = spinGoal; tour.state = 'in'; tour.span = tour.hold || DWELL; tour.next = t + tour.span; tour.hold = 0; }
   } else {
     moonK.value = Math.min(1, moonK.value + dt * 1.6);
     const bar = dotsEl.children[tour.i];
-    bar.style.setProperty('--p', tour.auto ? Math.min(100, (1 - (tour.next - t) / DWELL) * 100) + '%' : '100%');
+    bar.style.setProperty('--p', tour.auto ? Math.min(100, (1 - (tour.next - t) / (tour.span || DWELL)) * 100) + '%' : '100%');
     if (tour.auto && !focus && t > tour.next) goTo(tour.i + 1);
   }
 }

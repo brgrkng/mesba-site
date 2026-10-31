@@ -1058,6 +1058,9 @@ const STOPS = [
   { title: 'WellDev', where: 'Next', lat: 47.37, lon: 8.54, r: .1, countries: ['Switzerland'],
     body: 'Software engineering with Swiss roots and a team in Dhaka. The next stop on this map, and I am ready to join.' },
 ];
+// the last stop follows a real aircraft, live (needs the flights Worker; left out without it)
+const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : '';   // set to the deployed Worker's URL
+if (FLIGHTS_URL) STOPS.push({ title: 'Live flight', where: 'Live', lat: 0, lon: 0, r: .05, countries: [], live: true, body: '' });
 const DWELL = 9;                                     // seconds per stop
 const tour = { i: 0, want: 0, state: 'spin', next: Infinity, auto: !reduce };
 
@@ -1091,7 +1094,6 @@ function selectSpot(on) {
 }
 // ---- live air traffic in the spotlight close-up: real aircraft from adsb.lol, through a small Cloudflare Worker ----
 // (worker/flights.js). Locally it uses the worker run under Node on :8787.
-const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : '';   // set to the deployed Worker's URL
 const MAX_AC = 400, acPos = new Float32Array(MAX_AC * 3), trailPos = new Float32Array(MAX_AC * 6);
 const acGeo = new THREE.BufferGeometry(), trailGeo = new THREE.BufferGeometry();
 acGeo.setAttribute('position', new THREE.BufferAttribute(acPos, 3));
@@ -1188,8 +1190,46 @@ function showStop(st) {
   placePill.textContent = st.title;
   tourEl.classList.remove('swap'); void tourEl.offsetWidth; tourEl.classList.add('swap');
 }
+// ---- the live stop: a real aircraft cruising near the visitor (else over Bangladesh, else London) ----
+let livePlane = null, liveAt = -1e9, liveBusy = false;
+const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+async function fetchLivePlane() {
+  liveBusy = true; livePlane = null;
+  const near = [youLatLon && [...youLatLon, 'near you'], [23.7, 90.4, 'over Bangladesh'], [51.47, -.45, 'over London']].filter(Boolean);
+  for (const [lat, lon, where] of near) {
+    try {
+      const d = await (await fetch(`${FLIGHTS_URL}?lat=${lat}&lon=${lon}&r=250`)).json();
+      const cruising = d.ac.filter(a => a.alt >= 20000 && a.gs >= 300 && a.cs).sort((a, b) => b.alt - a.alt);
+      if (cruising.length) { livePlane = { ...cruising[Math.floor(Math.random() * Math.min(5, cruising.length))], where }; break; }
+    } catch { /* try the next place */ }
+  }
+  liveAt = clock.elapsedTime; liveBusy = false;
+}
+function describeLive(st) {
+  const p = livePlane;
+  st.title = p.cs; st.where = 'Live · ' + p.where; st.lat = p.lat; st.lon = p.lon;
+  st.body = `${p.t || 'An aircraft'} at ${Math.round(p.alt).toLocaleString()} ft and ${Math.round(p.gs)} knots, heading ` +
+            `${COMPASS[Math.round(((p.trk % 360) + 360) % 360 / 45) % 8]}. Metavision's spotlight is following it, live.`;
+}
+const planeGeo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+const planeDot = new THREE.Points(planeGeo, new THREE.PointsMaterial({ size: .06, sizeAttenuation: true, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, map: glowTexture([[0, 'rgba(255,255,255,1)'], [.3, 'rgba(170,160,255,.85)'], [1, 'rgba(120,100,255,0)']]) }));
+planeDot.visible = false;
+earth.add(planeDot);
+function followLive(dt) {                            // dead-reckon the plane; the spotlight sits on it
+  const st = STOPS[tour.i];
+  planeDot.visible = !!(st.live && livePlane && tour.state !== 'out');
+  if (!planeDot.visible) return;
+  dest(livePlane.lat, livePlane.lon, livePlane.trk, livePlane.gs * 1.852 / 6371 / 3600 * dt);
+  livePlane.lat = st.lat = ll[0]; livePlane.lon = st.lon = ll[1];
+  localDir(st.lat, st.lon, stopLocal);
+  planeGeo.attributes.position.setXYZ(0, stopLocal.x * 1.022, stopLocal.y * 1.022, stopLocal.z * 1.022);
+  planeGeo.attributes.position.needsUpdate = true;
+}
+
 function applyStop() {
   const st = STOPS[tour.i];
+  if (st.live) describeLive(st);
   localDir(st.lat, st.lon, stopLocal);
   const d = stageAz - Math.atan2(stopLocal.x, stopLocal.z) - earth.rotation.y;
   spinGoal = earth.rotation.y + Math.atan2(Math.sin(d), Math.cos(d));   // the shortest way round
@@ -1201,12 +1241,18 @@ function goTo(i) {
   if (i === tour.i && tour.state === 'in') return;
   tour.want = i; tour.state = 'out';
   if (spotSel) flying = true;
+  if (STOPS[i].live && !liveBusy && clock.elapsedTime - liveAt > 30) fetchLivePlane();   // a fresh plane each visit
 }
 // light fades out, Earth turns the next place onto the stage, light fades back in
 function updateTour(t, dt) {
   if (tour.state === 'out') {
     moonK.value = Math.max(0, moonK.value - dt * 3);
-    if (!moonK.value) { tour.i = tour.want; applyStop(); tour.state = 'spin'; }
+    if (!moonK.value) {
+      const next = STOPS[tour.want];
+      if (next.live && liveBusy) return;             // still finding a plane
+      if (next.live && !livePlane) { tour.want = (tour.want + 1) % STOPS.length; return; }   // none found: skip it
+      tour.i = tour.want; applyStop(); tour.state = 'spin';
+    }
   } else if (tour.state === 'spin') {
     const d = spinGoal - earth.rotation.y;
     earth.rotation.y += reduce ? d : d * (1 - Math.exp(-dt * 3.2));
@@ -1237,12 +1283,13 @@ function updateSun(now = new Date()) {
 
 // ---- the visitor, placed from the browser's timezone: no permission prompt, nothing sent anywhere ----
 const youLocal = new THREE.Vector3();
+let youLatLon = null;
 const youPill = Object.assign(document.createElement('div'), { className: 'pill you' });
 labelsEl.appendChild(youPill);
 fetch('tz.json').then(r => r.json()).then(zones => {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone, c = zones[tz];
   if (!c) return;
-  localDir(c[0], c[1], youLocal); youK.value = 1;
+  localDir(c[0], c[1], youLocal); youK.value = 1; youLatLon = c;
   const city = tz.split('/').pop().replace(/_/g, ' ');
   const label = () => youPill.textContent = `You · ${city} · ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   label(); setInterval(label, 20000);
@@ -1317,6 +1364,7 @@ function frame() {
   }
   gobo.uMv.value += ((mvOn ? 1 : 0) - gobo.uMv.value) * Math.min(1, rdt * 1.8);
   place(t);
+  followLive(rdt);
   updateTraffic(t, rdt);
   moveHeroes(reduce ? 0 : t);
 

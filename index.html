@@ -1059,7 +1059,7 @@ const STOPS = [
     body: 'Software engineering with Swiss roots and a team in Dhaka. The next stop on this map, and I am ready to join.' },
 ];
 // the last stop follows a real aircraft, live (needs the flights Worker; left out without it)
-const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : '';   // set to the deployed Worker's URL
+const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : 'https://mesba-flights.mesba.workers.dev';   // worker/flights.js
 if (FLIGHTS_URL) STOPS.push({ title: 'Live flight', where: 'Live', lat: 0, lon: 0, r: .05, countries: [], live: true, body: '' });
 const DWELL = 9;                                     // seconds per stop
 const tour = { i: 0, want: 0, state: 'spin', next: Infinity, auto: !reduce };

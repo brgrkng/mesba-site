@@ -245,6 +245,7 @@
   .contact a.mail { display: inline-block; margin-top: 36px; padding: 16px 22px; border: 1px solid var(--line); text-decoration: none; }
   .contact a.mail:hover { border-color: var(--accent); }
   footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--dim); }
+  footer .credits { margin-top: 8px; font-size: 10px; letter-spacing: .06em; opacity: .8; }
 
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
@@ -426,7 +427,9 @@
   <div class="pager wrap" id="pager" role="navigation" aria-label="More pages" hidden></div>
 </main>
 
-<footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur</div></footer>
+<footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur
+  <div class="credits">Earth: NASA Blue Marble &amp; Black Marble · Clouds: contains modified EUMETSAT data (live-cloud-maps) ·
+    Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
 
 <!-- pages: hash routing, one view at a time -->
 <script>
@@ -657,19 +660,41 @@ function drawHighlight(force) {
   hlTex.needsUpdate = true;
 }
 
+// ---- real imagery: NASA Blue Marble for this month, NASA Black Marble city lights, and today's clouds ----
+// (clouds: EUMETSAT satellites via live-cloud-maps, refreshed every 3 hours). Each fades in when it arrives;
+// until then the generated look stands in.
+const SMALL = innerWidth < 700, RES = SMALL ? '-2k' : '', MONTH = String(new Date().getUTCMonth() + 1).padStart(2, '0');
+const dayU = { value: null }, nightU = { value: null }, cloudU = { value: null };
+const realK = { value: 0 }, nightK = { value: 0 }, cloudK = { value: 0 };   // 0..1 fade-ins
+const fading = [];
+function loadTex(url, srgb, slot, k, onDone) {
+  new THREE.TextureLoader().load(url, t => {
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    slot.value = t; fading.push(k); onDone && onDone();
+  }, undefined, () => { /* keep the generated look */ });
+}
+loadTex(`earth/day-${MONTH}${RES}.jpg`, true, dayU, realK);
+loadTex(`earth/night${RES}.jpg`, false, nightU, nightK);
+
 const earthMat = new THREE.ShaderMaterial({
   uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
-              uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU },
+              uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU,
+              uDay: dayU, uNight: nightU, uCloud: cloudU, uRealK: realK, uNightK: nightK, uCloudK: cloudK },
   vertexShader: VERT,
   fragmentShader: NOISE + /* glsl */`
     uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
     uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
+    uniform sampler2D uDay; uniform sampler2D uNight; uniform sampler2D uCloud;
+    uniform float uRealK; uniform float uNightK; uniform float uCloudK;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun), V = normalize(cameraPosition - vW);
       vec4 mp = texture2D(uMap, vUv);
-      float n = fbm(vObj * 1.8 + vec3(1.7, .3, 4.1));
-      float detail = fbm(vObj * 9.);
+      // the generated stand-in only costs anything until the real imagery has faded in
+      bool fake = uRealK < .999 || uHasMap < .5;
+      float n = fake ? fbm(vObj * 1.8 + vec3(1.7, .3, 4.1)) : .5;
+      float detail = fake ? fbm(vObj * 9.) : .5;
       float lat = abs(vObj.y);
       // real coastlines once the map has loaded, procedural continents until then
       float land = mix(smoothstep(.505, .53, n), smoothstep(.25, .75, mp.r), uHasMap);
@@ -682,6 +707,9 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 alb = mix(ocean, mix(green, desert, dry), land);
       float ice = smoothstep(.88, .94, lat + (detail - .5) * .12);
       alb = mix(alb, vec3(.75, .8, .85), ice);
+      // NASA Blue Marble: the real colour of the ground for this month (snow, deserts, forests, ocean depth)
+      alb = mix(alb, texture2D(uDay, vUv).rgb * .62, uRealK);
+      ice *= 1. - uRealK;
 
       float NdL = dot(N, L);
       vec3 col = alb * max(NdL, 0.) * 1.7;
@@ -694,8 +722,10 @@ const earthMat = new THREE.ShaderMaterial({
       col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
       // city lights on the night side
       float night = smoothstep(.12, -.18, NdL);
-      float cities = smoothstep(.72, .92, noise(vObj * 160.)) * smoothstep(.45, .7, noise(vObj * 12.));
-      col += land * (1. - ice) * night * cities * vec3(1., .62, .28) * 1.6;
+      float cities = uNightK < .999 ? smoothstep(.72, .92, noise(vObj * 160.)) * smoothstep(.45, .7, noise(vObj * 12.)) * land * (1. - ice) : 0.;
+      float lights = texture2D(uNight, vUv).r;      // NASA Black Marble: where the lights really are
+      float cloudy = texture2D(uCloud, vUv).r * uCloudK;
+      col += night * mix(cities * 1.6, lights * lights * 2.4, uNightK) * vec3(1., .66, .32) * (1. - smoothstep(.4, .9, cloudy) * .8);
       // moonlight: sunlight bounced off the Metavision moon lights up a patch of the dark side
       float m = acos(clamp(dot(N, normalize(uSpot)), -1., 1.));
       float area = smoothstep(uSpotR, uSpotR * .35, m) * uMoonK;
@@ -720,15 +750,19 @@ earthTilt.add(earth);
 scene.add(earthTilt);
 
 const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR }, transparent: true, depthWrite: false,
+  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR, uCloud: cloudU, uCloudK: cloudK },
+  transparent: true, depthWrite: false,
   vertexShader: VERT,
   fragmentShader: NOISE + /* glsl */`
     uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
-    varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+    uniform sampler2D uCloud; uniform float uCloudK;
+    varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun);
-      float c = fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006));
-      float a = smoothstep(.5, .72, c) * .85;
+      float c = uCloudK < .999 ? fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006)) : 0.;
+      // today's clouds (white); clear desert reads mid-grey in the source, so the low end is cut away
+      float real = smoothstep(.38, .9, texture2D(uCloud, vUv).r);
+      float a = mix(smoothstep(.5, .72, c) * .85, real * .92, uCloudK);
       float lit = max(dot(N, L), 0.);
       float area = smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK;
       float mlit = area * smoothstep(.1, -.15, dot(N, L));
@@ -739,6 +773,9 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
     }`
 }));
 earth.add(clouds);
+// real clouds sit where they really are: once they arrive, the cloud layer stops drifting and lines up with the map
+loadTex(`https://clouds.matteason.co.uk/images/${SMALL ? '2048x1024' : '4096x2048'}/clouds.jpg`, false, cloudU, cloudK,
+        () => { clouds.rotation.y = 0; });
 
 // the moonlit section's thin rim (like an observer's frame) and the heroes in it, on a shell above the clouds
 scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.018, 96, 48), new THREE.ShaderMaterial({
@@ -1382,7 +1419,8 @@ function frame() {
   const raw = clock.getDelta(), dt = Math.min(raw, .05), t = clock.elapsedTime;
   timeU.value = t;
   motion += ((focus || reduce ? 0 : 1) - motion) * Math.min(1, dt * 2);
-  clouds.rotation.y += dt * .01 * motion;
+  if (!cloudU.value) clouds.rotation.y += dt * .01 * motion;
+  for (const k of fading) k.value = Math.min(1, k.value + Math.min(raw, .25) * .7);
   PROJECTS.forEach(p => p.a += dt * p.sp * motion);
   const rdt = Math.min(raw, .25);                   // real time, so transitions keep pace on slow machines
   updateTour(t, rdt);

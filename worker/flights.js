@@ -8,6 +8,7 @@
 //   GET /route?cs=QTR816            ->  { route: { airline, from: { iata, city, lat, lon }, to: {...} } | null }
 //   GET /callsign?cs=MAS1           ->  { ac: { lat, lon, trk, gs, alt, cs, t } | null }   (that flight, if airborne)
 //   GET /vacation                   ->  the trip, if Mesba has made it public: { on, place, until, flights: [...] }
+//   GET /mars                       ->  { rovers: [{ id, name, place, lat, lon, km, photo: { url, sol, cam, link } }] }
 //   GET /wind                       ->  { at, w: 30, h: 15, uv: [u, v, ...] }  winds at 700 hPa in m/s, 12° grid, rows south to north
 // Private (same-origin page at a secret path, password in the Authorization header). Two passwords, two roles:
 // ADMIN_PASSWORD edits the trip; VIEWER_PASSWORD (for his girlfriend) only reads it, public or not.
@@ -133,6 +134,30 @@ function cleanTrip(t) {
   };
 }
 
+// ---- Mars: where the two rovers stand and their newest photos, from NASA's public feeds (the waypoints have no CORS) ----
+async function mars() {
+  const get = u => fetch(u, { headers: UA }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const [pw, cw, pi, ci] = await Promise.all([
+    get('https://mars.nasa.gov/mmgis-maps/M20/Layers/json/M20_waypoints_current.json'),
+    get('https://mars.nasa.gov/mmgis-maps/MSL/Layers/json/MSL_waypoints_current.json'),
+    get('https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=1&page=0&order=sol+desc&extended=sample_type::full,'),
+    get('https://mars.nasa.gov/api/v1/raw_image_items/?order=sol%20desc,date_taken%20desc&per_page=6&page=0&condition_1=msl:mission'),
+  ]);
+  const cam = title => (title || '').split(': ').pop();
+  const p = pi?.images?.[0], c = ci?.items?.find(i => !i.is_thumbnail);
+  const rovers = [
+    [pw, 'perseverance', 'Perseverance', 'Jezero crater',
+     p && { url: p.image_files.medium, sol: p.sol, cam: cam(p.title), link: 'https://science.nasa.gov/mission/mars-2020-perseverance/raw-images/' }],
+    [cw, 'curiosity', 'Curiosity', 'Gale crater',
+     c && { url: c.https_url || c.url, sol: c.sol, cam: cam(c.title), link: 'https://science.nasa.gov/mission/msl-curiosity/raw-images/' }],
+  ].map(([w, id, name, place, photo]) => {
+    const at = w?.features?.[0]?.properties;
+    return at && { id, name, place, lat: at.lat, lon: at.lon, km: Math.round(at.dist_total_m / 100) / 10, photo };
+  }).filter(Boolean);
+  if (!rovers.length) throw new Error('mars feeds down');
+  return JSON.stringify({ rovers });
+}
+
 // ---- today's winds at 700 hPa (about 3 km up, where weather clouds are steered), from Open-Meteo (CC BY 4.0) ----
 // One upstream call every 3 hours for everyone: the grid is kept in KV, and the old one is served if Open-Meteo fails.
 async function wind(env) {
@@ -204,6 +229,7 @@ export default {
         const t = env.VACATION ? JSON.parse((await env.VACATION.get('trip')) || '{}') : {};
         body = JSON.stringify(t.public ? { on: t.on, place: t.place, until: t.until, flights: t.flights } : { on: false, flights: [] });
       }
+      else if (path === '/mars') body = await remember('mars', 18e5, mars);
       else if (path === '/wind') body = await remember('wind', 6e5, () => wind(env));
       else return notFound();
       if (body === null) return new Response('bad request', { status: 400, headers: cors });

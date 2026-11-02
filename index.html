@@ -38,7 +38,7 @@
   }
 
   /* ---- space hero ---- */
-  #space { position: relative; height: 100svh; min-height: 600px; overflow: hidden; background: #020205; }
+  #space { position: relative; height: 100svh; min-height: 600px; overflow: hidden; overflow: clip; background: #020205; }   /* clip: labels off-screen can't scroll it */
   /* sun glow: one fixed-size layer, moved with transform/opacity only (no repaints) */
   .sunglow { position: absolute; left: 0; top: 0; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; pointer-events: none; opacity: 0;
              background: radial-gradient(circle, oklch(0.95 0.08 80 / .5), oklch(0.8 0.12 60 / .12) 20%, transparent 50%); will-change: transform, opacity; }
@@ -124,6 +124,14 @@
   .panel .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .panel button, .panel a.go { font: inherit; background: none; border: 0; color: var(--ink); cursor: pointer; padding: 0; text-decoration: none; }
   .panel a.go { color: var(--accent); }
+  .panel .mars { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 16px; }
+  .panel .mars[hidden] { display: none; }
+  .rover { margin: 0; font-size: 12px; color: var(--muted); }
+  .rover img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--line); }
+  .rover b { display: block; margin-top: 8px; font-size: 14px; color: var(--ink); }
+  .rover span { display: block; }
+  .panel .dsn { grid-column: 1 / -1; font-size: 11px; line-height: 1.5; }
+  @media (max-width: 640px) { .rover img { aspect-ratio: 16 / 9; } }
   @media (max-width: 640px) { .panel { right: 16px; bottom: 56px; } .panel h3 { font-size: 28px; } }
 
   /* ---- sections ---- */
@@ -270,7 +278,7 @@
 </nav>
 
 <main>
-  <div id="space" data-view="home" role="region" aria-label="Interactive solar system of projects. Earth is home; the moon is Metavision. Select a label to travel. Drag to look around.">
+  <div id="space" data-view="home" role="region" aria-label="Earth, the Metavision moon and Mars. Select a label to travel. Drag to look around.">
     <canvas aria-hidden="true"></canvas>
     <div class="sunglow" id="sunglow"></div>
     <div class="hero-copy"><div class="wrap">
@@ -297,6 +305,7 @@
       <div class="kind mono" id="p-kind"></div>
       <h3 id="p-title"></h3>
       <p id="p-body"></p>
+      <div class="mars" id="p-mars" hidden></div>
       <div class="row mono"><button id="p-back">← Back to Earth</button><a class="go" id="p-go" href="#">Open →</a></div>
     </aside>
   </div>
@@ -434,7 +443,8 @@
 
 <footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur
   <div class="credits">Earth: NASA Blue Marble &amp; Black Marble · Clouds: contains modified EUMETSAT data (live-cloud-maps) ·
-    Winds: Open-Meteo · Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
+    Winds: Open-Meteo · Borders: Natural Earth · Flights: adsb.lol, adsbdb ·
+    Mars: Solar System Scope (CC BY 4.0) · Rovers: NASA/JPL-Caltech · NASA DSN Now</div></div></footer>
 
 <!-- pages: hash routing, one view at a time -->
 <script>
@@ -890,43 +900,60 @@ logo.scale.setScalar(.42);
 moon.add(logo);
 scene.add(moon);
 
-// ---- other projects: planets on wider orbits ----
-function planetTexture(c1, c2, banded, seed) {
-  const W = 256, H = 128, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const g = cv.getContext('2d'), a = new THREE.Color(c1), b = new THREE.Color(c2);
-  let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-  const ph = [rnd() * 6, rnd() * 6, rnd() * 6];
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const u = x / W * Math.PI * 2, v = y / H;
-    let t = banded
-      ? .5 + .5 * Math.sin(v * 22 + Math.sin(u * 2 + ph[0]) * .8 + Math.sin(v * 7 + ph[1]) * 2)
-      : .5 + .25 * Math.sin(u * 3 + ph[0] + Math.sin(v * 9) * 2) + .25 * Math.sin(v * 13 + Math.cos(u * 5 + ph[2]));
-    const c = a.clone().lerp(b, Math.min(1, Math.max(0, t)));
-    g.fillStyle = `rgb(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0})`; g.fillRect(x, y, 1, 1);
-  }
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
-}
-
-const PROJECTS = [
-  { id: 'cabel', name: 'Cabel', kind: 'Desktop app', c: ['#1e3a8a', '#7dd3fc'], banded: true, r: .32, d: 4.6, a: 4.2, sp: .035,
-    body: 'A desktop chat app shaped like Discord, built on Tauri. Servers, voice channels, roles. The installer is 2.1 MB.' },
-  { id: 'sqlearn', name: 'SQLearn', kind: 'Education', c: ['#064e3b', '#6ee7b7'], banded: false, r: .26, d: 6, a: 5.6, sp: .022,
-    body: 'A Postgres course in the browser, graded on correctness and on EXPLAIN cost.' },
-  { id: 'epc', name: 'EPC Books', kind: 'Casting', c: ['#500724', '#f9a8d4'], banded: true, r: .3, d: 7.4, a: .2, sp: .015,
-    body: 'Data-driven caster prep for EPC Seasons 2 and 3, built by a pipeline.' },
-  { id: 'fyytness', name: 'Fyytness', kind: 'Mobile', c: ['#1a2e05', '#bef264'], banded: false, r: .24, d: 8.8, a: 2.1, sp: .01,
-    body: 'An offline-first Android fitness tracker. Kotlin, Compose, Room, Firebase.' },
-];
-PROJECTS.forEach((p, i) => {
-  p.tilt = (i % 2 ? 1 : -1) * (.05 + (i * .037) % .12);
-  p.mesh = new THREE.Mesh(new THREE.SphereGeometry(p.r, 48, 24),
-    new THREE.MeshStandardMaterial({ map: planetTexture(p.c[0], p.c[1], p.banded, 97 + i * 31), roughness: .85, metalness: 0 }));
-  scene.add(p.mesh);
-  const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(a) * p.d, 0, Math.sin(a) * p.d)); }
-  const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: .06 }));
-  ring.rotation.x = p.tilt; scene.add(ring);
+// ---- Mars: the real planet, to scale with Earth (not at its real distance), turned and lit as it is right now ----
+const MARS_R = .532;
+const marsMap = { value: null }, marsLight = { value: new THREE.Vector3(0, 0, 1) };
+const mars = new THREE.Mesh(new THREE.SphereGeometry(MARS_R, 96, 48), new THREE.ShaderMaterial({
+  uniforms: { uMap: marsMap, uL: marsLight },
+  vertexShader: VERT,
+  fragmentShader: /* glsl */`
+    uniform sampler2D uMap; uniform vec3 uL;
+    varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+    void main(){
+      vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
+      float d = dot(N, uL);
+      vec3 col = texture2D(uMap, vUv).rgb * (max(d, 0.) * 1.6 + .035);      // a trace of light on the night side, so its outline reads
+      col += pow(clamp(1. - dot(N, V), 0., 1.), 4.) * vec3(.9, .5, .3) * .3 * smoothstep(-.2, .4, d);   // thin dusty air at the limb
+      gl_FragColor = vec4(col, 1.);
+    }`
+}));
+mars.position.set(2, -3.4, -4.4);
+scene.add(mars);
+new THREE.TextureLoader().load(`earth/mars${RES}.jpg`, t => {
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); marsMap.value = t;
 });
-function orbitPos(d, a, tilt, out) { return out.set(Math.cos(a) * d, 0, Math.sin(a) * d).applyAxisAngle(new THREE.Vector3(1, 0, 0), tilt); }
+const MARS_TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), .44), MARS_TILT_INV = MARS_TILT.clone().invert();
+const marsSolDate = (ms = Date.now()) => (ms / 864e5 + 2440587.5 + 69.184 / 86400 - 2405522.0028779) / 1.0274912517;
+const marsSpin = new THREE.Quaternion(), toEarth = new THREE.Vector3(), side = new THREE.Vector3(), marsNoon = new THREE.Vector3();
+let marsPhase = null;
+function updateMars() {
+  // lit as it looks from Earth right now (always nearly full): the real Sun-Mars-Earth angle, from the sun's side of the picture
+  marsPhase ??= marsNow()[1];
+  toEarth.copy(mars.position).negate().normalize();
+  side.copy(SUN_DIR).addScaledVector(toEarth, -SUN_DIR.dot(toEarth)).normalize();
+  marsLight.value.copy(toEarth).multiplyScalar(Math.cos(marsPhase)).addScaledVector(side, Math.sin(marsPhase));
+  // turned so the meridian where it is noon right now faces that light: the rovers have daylight when they really do
+  localDir(0, (12 - marsSolDate() % 1 * 24) * 15, marsNoon);
+  side.copy(marsLight.value).applyQuaternion(MARS_TILT_INV);
+  marsSpin.setFromAxisAngle(UP, Math.atan2(side.x, side.z) - Math.atan2(marsNoon.x, marsNoon.z));
+  mars.quaternion.copy(MARS_TILT).multiply(marsSpin);
+}
+// where Earth and Mars are around the sun: JPL's approximate orbital elements (1800-2050), per century from J2000
+const EARTH_ORBIT = [[1.00000261, .00000562], [.01671123, -.00004392], [-.00001531, -.01294668], [100.46457166, 35999.37244981], [102.93768193, .32327364], [0, 0]];
+const MARS_ORBIT = [[1.52371034, .00001847], [.0933941, .00007882], [1.84969142, -.00813131], [-4.55343205, 19140.30268499], [-23.94362959, .44441088], [49.55953891, -.29257343]];
+function helio(el, T) {                              // heliocentric ecliptic position in AU
+  const [a, e, I, L, w, O] = el.map(([v, r]) => v + r * T), M = (L - w) * D2R;
+  let E = M; for (let k = 0; k < 8; k++) E = M + e * Math.sin(E);
+  const x = a * (Math.cos(E) - e), y = a * Math.sqrt(1 - e * e) * Math.sin(E), o = (w - O) * D2R, n = O * D2R, i = I * D2R;
+  return [x * (Math.cos(o) * Math.cos(n) - Math.sin(o) * Math.sin(n) * Math.cos(i)) - y * (Math.sin(o) * Math.cos(n) + Math.cos(o) * Math.sin(n) * Math.cos(i)),
+          x * (Math.cos(o) * Math.sin(n) + Math.sin(o) * Math.cos(n) * Math.cos(i)) - y * (Math.sin(o) * Math.sin(n) - Math.cos(o) * Math.cos(n) * Math.cos(i)),
+          x * Math.sin(o) * Math.sin(i) + y * Math.cos(o) * Math.sin(i)];
+}
+function marsNow(ms = Date.now()) {                  // [distance from Earth in AU, Sun-Mars-Earth angle]
+  const T = (ms / 864e5 + 2440587.5 - 2451545) / 36525, e = helio(EARTH_ORBIT, T), m = helio(MARS_ORBIT, T);
+  const em = e.map((v, i) => v - m[i]), au = Math.hypot(...em);
+  return [au, Math.acos(-(em[0] * m[0] + em[1] * m[1] + em[2] * m[2]) / au / Math.hypot(...m))];
+}
 
 // ---- worlds: what can be focused ----
 const WORLDS = [
@@ -934,7 +961,7 @@ const WORLDS = [
     body: 'MD Mesbahur Rahman. I have a BSc in Computer Science (AI & Data Science) and an MBA in Business Analytics, and I wrote production SAP code at Hilti. I build tools and cast Dota 2. Everything here orbits that.' },
   { id: 'metavision', name: 'Metavision', kind: 'Dota 2 broadcasting', obj: moon, r: .42, href: '#metavision', cls: 'moon',
     body: 'An automated observer for Dota 2 broadcasts. It reads the live game, finds the story, frames the fight and moves the camera like a pro observer would. Live on the EPC broadcast for two months.' },
-  ...PROJECTS.map(p => ({ id: p.id, name: p.name, kind: p.kind, obj: p.mesh, r: p.r, href: '#work', body: p.body })),
+  { id: 'mars', name: 'Mars', kind: 'Live from Mars', obj: mars, r: MARS_R, href: '', body: '' },
 ];
 
 // labels (accessible buttons)
@@ -961,7 +988,9 @@ function focusOn(w) {
   $('tour').hidden = $('hint').hidden = !!w;
   if (!w) { panel.hidden = true; return; }
   $('p-kind').textContent = w.kind; $('p-title').textContent = w.name.replace(' · Me', '');
-  $('p-body').textContent = w.body; $('p-go').href = w.href;
+  $('p-body').textContent = w.body; $('p-go').href = w.href; $('p-go').hidden = !w.href;
+  $('p-mars').hidden = w.id !== 'mars';
+  if (w.id === 'mars') showMars();
   panel.hidden = false;
 }
 controls.addEventListener('start', () => { flying = false; });
@@ -1015,7 +1044,7 @@ new IntersectionObserver(([e]) => visible = e.isIntersecting).observe(stage);
 
 // ---- loop ----
 const clock = new THREE.Clock(), tmp = new THREE.Vector3(), goal = new THREE.Vector3(), look = new THREE.Vector3();
-let motion = 1, viewShift = 0;
+let motion = 1, viewShift = 0, viewLift = 0;
 // slow machine (e.g. no GPU acceleration): every ~1.5 s, drop bloom and lower the render resolution while the frame
 // rate is poor (close-ups cost far more than the wide shot), and raise it again when there's headroom
 let perfFrames = 0, perfStart = 0, pr = Math.min(devicePixelRatio, 2);
@@ -1263,6 +1292,63 @@ async function checkTrip() {
 $('vac').onclick = () => goTo(LIVE_I, true);
 if (FLIGHTS_URL) { checkTrip(); setInterval(checkTrip, 60_000); }
 
+// ---- Mars, live: the rovers (via the Worker), their local time, how far away it is, and who is talking to it ----
+let marsRovers = [];
+const SOL0 = { perseverance: 52304, curiosity: 49269 };   // each rover counts sols from its landing (Mars Sol Date)
+const pinMat = new THREE.SpriteMaterial({ map: glowTexture([[0, 'rgba(235,230,255,1)'], [.25, 'rgba(139,124,255,.7)'], [1, 'rgba(139,124,255,0)']]),
+  blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+async function loadMars() {
+  try { marsRovers = (await (await fetch(`${FLIGHTS_URL}/mars`)).json()).rovers; } catch { return; }
+  for (const r of marsRovers) {
+    r.pin = new THREE.Sprite(pinMat); r.pin.scale.setScalar(.05);
+    localDir(r.lat, r.lon, r.pin.position).multiplyScalar(MARS_R * 1.02); mars.add(r.pin);
+    r.pill = Object.assign(document.createElement('div'), { className: 'pill airport', textContent: r.name });
+    labelsEl.appendChild(r.pill);
+  }
+}
+if (FLIGHTS_URL) loadMars();
+function marsView(out) {                             // the way to look at Mars: down on the rovers, leaning toward the sun
+  out.set(0, 0, 0);
+  for (const r of marsRovers) out.add(cand.copy(r.pin.position).normalize());
+  if (!marsRovers.length) localDir(18.4, 77.2, out);   // Jezero
+  return out.normalize().applyQuaternion(mars.quaternion).addScaledVector(marsLight.value, .5).normalize();
+}
+const MARS_CRAFT = { M20: 'Perseverance', MSL: 'Curiosity', MRO: 'Mars Reconnaissance Orbiter', MVN: 'MAVEN', M01O: 'Mars Odyssey',
+                     ODY: 'Mars Odyssey', TGO: 'Trace Gas Orbiter', MEX: 'Mars Express', EMM: 'Hope', ESCG: 'ESCAPADE (on its way)' };
+async function dsnText() {                           // NASA's Deep Space Network, this minute
+  try {
+    const x = new DOMParser().parseFromString(await (await fetch('https://eyes.nasa.gov/dsn/data/dsn.xml?r=' + Date.now())).text(), 'text/xml');
+    const links = new Set(); let station = '';
+    for (const n of x.documentElement.children) {
+      if (n.tagName === 'station') station = n.getAttribute('friendlyName');
+      else if (n.tagName === 'dish') for (const t of n.getElementsByTagName('target')) {
+        const craft = MARS_CRAFT[t.getAttribute('name')];
+        if (craft) links.add(`${station} ↔ ${craft}`);
+      }
+    }
+    return links.size ? `Deep Space Network, right now: ${[...links].join(' · ')}` : 'No Deep Space Network dish is talking to Mars this minute.';
+  } catch { return ''; }
+}
+async function showMars() {
+  const km = marsNow()[0] * 149597871, s = Math.round(km / 299792.458), msd = marsSolDate();
+  $('p-body').textContent = `Drawn to scale with Earth. It is ${Math.round(km / 1e6)} million km away right now, so a radio signal takes ${Math.floor(s / 60)} min ${s % 60} s each way.`;
+  const el = (tag, text, cls) => Object.assign(document.createElement(tag), text == null ? {} : { textContent: text }, cls ? { className: cls } : {});
+  const cards = marsRovers.map(r => {
+    const fig = el('figure', null, 'rover'), L = msd + r.lon / 360, h = L % 1 * 24;
+    if (r.photo?.url?.startsWith('https://')) {
+      const a = el('a'); a.href = r.photo.link; a.target = '_blank'; a.rel = 'noopener';
+      const img = el('img'); img.src = r.photo.url; img.alt = `${r.name}'s newest raw photo, ${r.photo.cam}, sol ${r.photo.sol}`; img.title = img.alt;
+      a.append(img); fig.append(a);
+    }
+    fig.append(el('b', r.name), el('span', `${r.place}, ${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor(h % 1 * 60)).padStart(2, '0')} local`),
+               el('span', `Sol ${Math.floor(L) - SOL0[r.id]} · ${r.km} km driven`));
+    return fig;
+  });
+  const dsn = el('div', '', 'dsn mono');
+  $('p-mars').replaceChildren(...cards, dsn);
+  dsn.textContent = await dsnText();
+}
+
 // ---- the weather keeps up: today's winds (via the Worker), and fresh clouds every hour for a page left open ----
 async function loadWind() {
   try {
@@ -1475,7 +1561,6 @@ function place(t) {
   beam.position.copy(spotU.value).addScaledVector(toSpot, -len / 2);
   beam.scale.set(spotR.value / .42, len, spotR.value / .42);
   beam.quaternion.setFromUnitVectors(UP, toSpot.negate());
-  PROJECTS.forEach(p => orbitPos(p.d, p.a, p.tilt, p.mesh.position));
 }
 function project(v, el, hide) {
   tmp.copy(v).project(camera);
@@ -1491,11 +1576,11 @@ function frame() {
   motion += ((focus || reduce ? 0 : 1) - motion) * Math.min(1, dt * 2);
   if (!cloudU.value) clouds.rotation.y += dt * .01 * motion; else flowU.value += dt * motion;
   for (const k of fading) k.value = Math.min(1, k.value + Math.min(raw, .25) * .7);
-  PROJECTS.forEach(p => p.a += dt * p.sp * motion);
   const rdt = Math.min(raw, .25);                   // real time, so transitions keep pace on slow machines
   updateTour(t, rdt);
   if (tour.state !== 'spin' && !spotSel) earth.rotation.y += dt * .025 * motion;   // slow spin (sun turns with it)
   place(t);
+  updateMars();
   followLive(t, rdt);
   updateTraffic(t, rdt);
   moveHeroes(reduce ? 0 : t);
@@ -1504,9 +1589,9 @@ function frame() {
     const k = 1 - Math.exp(-dt * 2.6);
     if (focus) {
       const p = focus.obj.position;
-      // approach from the sunlit side, a little above, so the world is lit in the shot
-      goal.copy(p).add(tmp.copy(SUN_DIR).multiplyScalar(.45).add(camera.position.clone().sub(p).normalize()).normalize()
-        .multiplyScalar(focus.r * (focus.id === 'earth' ? 4.6 : 7) + .6)).add(new THREE.Vector3(0, focus.r * 1.2, 0));
+      // approach from the sunlit side, a little above, so the world is lit in the shot (Mars: over the rovers, toward the sun)
+      const from = focus.id === 'mars' ? marsView(tmp) : tmp.copy(SUN_DIR).multiplyScalar(.45).add(camera.position.clone().sub(p).normalize()).normalize();
+      goal.copy(p).add(from.multiplyScalar(focus.r * (focus.id === 'metavision' ? 7 : 4.6) + .6)).add(new THREE.Vector3(0, focus.r * 1.2, 0));
       controls.target.lerp(p, k);
     } else if (spotSel) {
       finalT.copy(stopLocal).applyAxisAngle(UP, tour.state === 'spin' ? spinGoal : earth.rotation.y).applyQuaternion(tour.state === 'spin' ? tiltGoal : earthTilt.quaternion);
@@ -1517,12 +1602,20 @@ function frame() {
     if (camera.position.distanceTo(goal) < .01) flying = false;
   } else if (focus) controls.target.copy(focus.obj.position);
   controls.update();
-  // wide screens: shift the picture so Earth sits right of the headline and the tour card
-  viewShift += ((!focus && stageW >= 900 ? -.17 : 0) - viewShift) * Math.min(1, dt * 3);
-  camera.setViewOffset(stageW, stageH, viewShift * stageW, 0, stageW, stageH);
+  // wide screens: shift the picture so Earth sits right of the headline and the tour card, or a focused world left of its panel
+  viewShift += ((stageW < 700 ? 0 : focus ? .15 : stageW >= 900 ? -.17 : 0) - viewShift) * Math.min(1, dt * 3);
+  viewLift += ((focus && stageW < 700 ? .24 : 0) - viewLift) * Math.min(1, dt * 3);   // phones: a focused world sits above its panel
+  camera.setViewOffset(stageW, stageH, viewShift * stageW, viewLift * stageH, stageW, stageH);
 
   // labels sit just above each world
   WORLDS.forEach(w => project(tmp.copy(w.obj.position).add(new THREE.Vector3(0, w.r + .18, 0)), w.label));
+  // the rovers' name tags, while Mars is in focus and they face us
+  for (const r of marsRovers) {
+    r.pin.getWorldPosition(cand);
+    const seen = look.copy(cand).sub(mars.position).normalize().dot(tmp.copy(camera.position).sub(cand).normalize());
+    project(cand, r.pill, focus?.id !== 'mars' || seen < .15);
+    r.pill.style.transform += ' translate(12px, -50%)';
+  }
   // the current place's label, pinned to the spotlight while it faces us
   const sp = cand.copy(spotU.value).multiplyScalar(1.02), seen = sp.clone().normalize().dot(tmp.copy(camera.position).sub(sp).normalize());
   project(sp, placePill, !!focus || moonK.value < .4 || seen < .15);

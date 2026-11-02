@@ -46,6 +46,10 @@
   #space canvas:active { cursor: grabbing; }
   .hero-copy { position: absolute; z-index: 2; left: 0; right: 0; top: 104px; pointer-events: none; transition: opacity .5s; }
   .hero-copy h1 { font-size: clamp(54px, 10vw, 128px); text-transform: uppercase; }
+  .vac { margin-top: 16px; padding: 8px 12px; pointer-events: auto; cursor: pointer; color: var(--ink); background: color-mix(in oklch, var(--live) 12%, var(--bg));
+         border: 1px solid color-mix(in oklch, var(--live) 50%, transparent); }
+  .vac:hover, .vac:focus-visible { border-color: var(--live); outline: none; }
+  .vac[hidden] { display: none; }
   .hero-copy .mono { margin-top: 22px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .hint { position: absolute; right: 16px; bottom: 20px; color: var(--dim); pointer-events: none; transition: opacity .3s; }
@@ -272,6 +276,7 @@
     <div class="hero-copy"><div class="wrap">
       <h1>Hey, I'm <span class="hl">Mesba.</span></h1>
       <div class="mono"><span>Software · Analytics · Dota 2 caster</span><span class="dot"></span><span>MBA Business Analytics</span><span class="dot"></span><span>Ex: Hilti IT</span></div>
+      <button class="vac mono" id="vac" hidden></button>
     </div></div>
     <div class="labels" id="labels"></div>
     <div class="hint mono" id="hint">Drag to orbit · scroll to zoom</div>
@@ -1187,7 +1192,7 @@ function showStop(st) {
   fl.hidden = !st.live || liveList.length < 2;
   if (!fl.hidden) fl.replaceChildren(...liveList.map((a, i) => {
     const b = document.createElement('button'), name = document.createElement('b');
-    name.textContent = a.cs;
+    name.textContent = (a.mine ? '★ ' : '') + a.cs;
     const via = document.createElement('i');
     b.append(name, `${a.t || 'Aircraft'} · ${Math.round(a.alt / 1000)}k ft`, via);
     b.dataset.i = i; b.setAttribute('aria-pressed', String(!!livePlane && a.cs === livePlane.cs));
@@ -1202,20 +1207,50 @@ let liveList = [], liveWhere = '', liveFetchedAt = 0;  // the flights you can sw
 const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 async function fetchLivePlane() {
   liveBusy = true; livePlane = null;
-  const near = [youLatLon && [...youLatLon, 'near you'], [23.7, 90.4, 'over Bangladesh'], [51.47, -.45, 'over London']].filter(Boolean);
+  const near = [myAir && [myAir.lat, myAir.lon, "Mesba's flight"], youLatLon && [...youLatLon, 'near you'],
+                [23.7, 90.4, 'over Bangladesh'], [51.47, -.45, 'over London']].filter(Boolean);
   for (const [lat, lon, where] of near) {
     try {
       const d = await (await fetch(`${FLIGHTS_URL}?lat=${lat}&lon=${lon}&r=250`)).json();
-      const cruising = d.ac.filter(a => a.alt >= 20000 && a.gs >= 300 && a.cs).sort((a, b) => b.alt - a.alt);
+      const cruising = d.ac.filter(a => a.alt >= 20000 && a.gs >= 300 && a.cs && a.cs !== myAir?.cs).sort((a, b) => b.alt - a.alt);
+      if (myAir) cruising.unshift({ ...myAir });     // his flight first, and the one followed
       if (cruising.length) {
         liveList = cruising.slice(0, 6); liveWhere = where; liveFetchedAt = clock.elapsedTime;
-        livePlane = { ...liveList[Math.floor(Math.random() * Math.min(5, liveList.length))], where };
+        livePlane = { ...liveList[myAir ? 0 : Math.floor(Math.random() * Math.min(5, liveList.length))], where };
         break;
       }
     } catch { /* try the next place */ }
   }
   liveAt = clock.elapsedTime; liveBusy = false;
 }
+
+// ---- Mesba's trip, if he has made it public (set from his private page; see worker/flights.js) ----
+let trip = null, myAir = null;
+const dayName = d => new Date(d + 'T12:00:00').toLocaleDateString([], { day: 'numeric', month: 'short' });
+function showTrip() {
+  const el = $('vac'), f = myAir && trip.flights.find(x => x.cs === myAir.cs);
+  el.hidden = !trip?.on;
+  if (!trip?.on) return;
+  el.textContent = f ? `✈ Mesba is flying · ${f.flight}${f.from && f.to ? ` ${f.from.iata} → ${f.to.iata}` : ''}`
+                     : `● On vacation${trip.place ? ' · ' + trip.place : ''}${trip.until ? ' · back ' + dayName(trip.until) : ''}`;
+}
+async function checkTrip() {
+  try { trip = await (await fetch(`${FLIGHTS_URL}/vacation`)).json(); } catch { return; }
+  const today = Date.now(), wasFlying = !!myAir;
+  myAir = null;
+  if (trip.on) for (const f of trip.flights) {
+    if (f.date && Math.abs(new Date(f.date + 'T12:00:00Z') - today) > 1.5 * 864e5) continue;   // only flights around today
+    if (f.from && f.to) routes.set(f.cs, { airline: f.airline, from: f.from, to: f.to });      // his route is known: no lookup
+    try {
+      const { ac } = await (await fetch(`${FLIGHTS_URL}/callsign?cs=${encodeURIComponent(f.cs)}`)).json();
+      if (ac) { myAir = { ...ac, cs: f.cs, mine: true }; break; }
+    } catch { /* not airborne, or no data */ }
+  }
+  showTrip();
+  if (myAir && !wasFlying) { liveAt = -1e9; goTo(LIVE_I, true); }   // he just took off (or the page just opened): show it
+}
+$('vac').onclick = () => goTo(LIVE_I, true);
+if (FLIGHTS_URL) { checkTrip(); setInterval(checkTrip, 60_000); }
 // routes come from adsbdb through the Worker; a route only counts if the plane is plausibly on it right now
 const routes = new Map();                            // callsign -> pending promise, then route | null
 function getRoute(cs) {

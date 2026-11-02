@@ -3,3 +3,8 @@ name = "mesba-flights"
 main = "flights.js"
 compatibility_date = "2025-06-01"
 workers_dev = true
+
+# the trip (vacation status + flights); written only through the password-protected admin API
+[[kv_namespaces]]
+binding = "VACATION"
+id = "51f570edb3c642878afdb52b26cfcec4"

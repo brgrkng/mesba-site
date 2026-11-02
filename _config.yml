@@ -1,0 +1,2 @@
+# GitHub Pages: publish the site, not the Worker source (its sign-in page only works at the secret Worker address anyway)
+exclude: [worker]

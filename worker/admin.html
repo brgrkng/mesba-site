@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Mesba</title>
+<style>
+  :root { --bg: #0d0c12; --surface: #15141c; --line: #2a2833; --ink: #f1eff6; --muted: #a39fae; --accent: #8b7cff; --bad: #ff8a7a; --ok: #6ee7b7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-size: 28px; margin: 0 0 24px; letter-spacing: -.01em; }
+  h2 { font-size: 36px; margin: 8px 0 4px; letter-spacing: -.01em; }
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 6px; }
+  input { width: 100%; padding: 11px 12px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 0; }
+  input:focus { outline: none; border-color: var(--accent); }
+  button { font: inherit; padding: 11px 16px; cursor: pointer; color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0d0c12; font-weight: 600; }
+  button:hover { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > div { flex: 1; }
+  .check { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 16px; }
+  .check input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .check small { color: var(--muted); font-size: 13px; }
+  .list { margin-top: 10px; display: grid; gap: 8px; }
+  .card { display: flex; justify-content: space-between; gap: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--line); }
+  .card b { display: block; }
+  .card small, .muted { color: var(--muted); }
+  .card small, .card .live { display: block; }
+  .live { color: var(--ok); }
+  .bar { height: 4px; background: var(--line); margin-top: 8px; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  .msg { min-height: 1.5em; margin-top: 14px; font-size: 14px; }
+  .msg.bad { color: var(--bad); } .msg.ok { color: var(--ok); }
+  .actions { display: flex; gap: 8px; margin-top: 28px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <form id="login">
+    <h1>Sign in</h1>
+    <label for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" required autofocus>
+    <div class="actions"><button class="primary" type="submit">Sign in</button></div>
+    <div class="msg bad" id="login-msg" role="alert"></div>
+  </form>
+
+  <!-- Mesba: edit the trip -->
+  <form id="edit" hidden>
+    <h1>Vacation</h1>
+    <div class="check"><input id="on" type="checkbox"><label for="on" style="margin:0;text-transform:none;letter-spacing:0;font-size:16px;color:var(--ink)">On vacation</label></div>
+    <div class="check"><input id="public" type="checkbox"><label for="public" style="margin:0;text-transform:none;letter-spacing:0;font-size:16px;color:var(--ink)">Show on my public website <small>(she always sees it)</small></label></div>
+    <label for="place">Where</label>
+    <input id="place" maxlength="60" placeholder="Bali">
+    <label for="until">Back on</label>
+    <input id="until" type="date">
+
+    <label>Flights</label>
+    <div class="list" id="flights"></div>
+    <div class="row" style="margin-top:10px">
+      <div><label for="fno">Flight number</label><input id="fno" placeholder="MH1 or MAS1" autocapitalize="characters"></div>
+      <div><label for="fdate">Date</label><input id="fdate" type="date"></div>
+      <button type="button" id="add">Add</button>
+    </div>
+
+    <div class="actions">
+      <button class="primary" type="submit">Save</button>
+      <button type="button" class="signout">Sign out</button>
+    </div>
+    <div class="msg" id="edit-msg" role="status"></div>
+  </form>
+
+  <!-- his girlfriend: where is he right now -->
+  <section id="view" hidden>
+    <div class="muted" id="v-when"></div>
+    <h2 id="v-head"></h2>
+    <div class="muted" id="v-sub"></div>
+    <div class="list" id="v-flights"></div>
+    <div class="actions"><button type="button" class="signout">Sign out</button></div>
+  </section>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  let pw = sessionStorage.getItem('pw') || '';      // only this tab, gone when it closes
+  let trip = { on: false, public: false, place: '', until: '', flights: [] };
+
+  async function call(path, method, body) {
+    const r = await fetch(path, { method, headers: { 'Authorization': 'Bearer ' + pw, 'Content-Type': 'application/json' },
+                                  body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    if ([401, 403, 429].includes(r.status)) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Not signed in'); }
+    if (!r.ok) throw new Error('Something went wrong (' + r.status + ')');
+    return r.json();
+  }
+  const msg = (id, text, kind) => { const m = $(id); m.textContent = text; m.className = 'msg ' + (kind || ''); };
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const day = d => d ? new Date(d + 'T12:00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  const routeText = f => f.from && f.to ? `${f.airline ? f.airline + ' · ' : ''}${f.from.city} (${f.from.iata}) → ${f.to.city} (${f.to.iata})` : 'Route unknown';
+
+  // ---------- Mesba's editor ----------
+  function drawFlights() {
+    $('flights').replaceChildren(...trip.flights.map((f, i) => {
+      const row = el('div', null, 'card'), info = el('div'), rm = el('button', 'Remove');
+      info.append(el('b', `${f.flight}${f.cs && f.cs !== f.flight ? ' (' + f.cs + ')' : ''} · ${day(f.date) || 'no date'}`), el('small', routeText(f)));
+      rm.type = 'button'; rm.onclick = () => { trip.flights.splice(i, 1); drawFlights(); };
+      row.append(info, rm);
+      return row;
+    }));
+  }
+  function fill() {
+    $('on').checked = !!trip.on; $('public').checked = !!trip.public;
+    $('place').value = trip.place || ''; $('until').value = trip.until || '';
+    drawFlights();
+  }
+  $('add').onclick = async () => {
+    const flight = $('fno').value.trim();
+    if (!flight) return;
+    msg('edit-msg', 'Looking up ' + flight + '…');
+    try {
+      const r = await call('/admin/resolve', 'POST', { flight });
+      if (r.error) return msg('edit-msg', r.error, 'bad');
+      trip.flights.push({ ...r, date: $('fdate').value });
+      $('fno').value = ''; drawFlights();
+      msg('edit-msg', r.warning || 'Added. Save to publish.', r.warning ? '' : 'ok');
+    } catch (err) { msg('edit-msg', err.message, 'bad'); }
+  };
+  $('edit').onsubmit = async e => {
+    e.preventDefault();
+    Object.assign(trip, { on: $('on').checked, public: $('public').checked, place: $('place').value, until: $('until').value });
+    try { trip = await call('/admin/trip', 'PUT', trip); fill(); msg('edit-msg', 'Saved.', 'ok'); }
+    catch (err) { msg('edit-msg', err.message, 'bad'); }
+  };
+
+  // ---------- her status view: refreshes every 30 s, flights tracked live while in the air ----------
+  const R = 6371, rad = d => d * Math.PI / 180;
+  function arc(a, b) {                                // great-circle distance in km
+    const h = Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  async function drawView() {
+    trip = await call('/admin/status', 'GET');
+    $('v-when').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    $('v-head').textContent = trip.on ? `On vacation${trip.place ? ' in ' + trip.place : ''}` : 'Home';
+    $('v-sub').textContent = trip.on && trip.until ? 'Back on ' + day(trip.until) : '';
+    const cards = await Promise.all((trip.on ? trip.flights : []).map(async f => {
+      const card = el('div', null, 'card'), info = el('div');
+      info.append(el('b', `${f.flight}${f.date ? ' · ' + day(f.date) : ''}`), el('small', routeText(f)));
+      let ac = null;
+      try { ac = (await (await fetch('/callsign?cs=' + encodeURIComponent(f.cs), { cache: 'no-store' })).json()).ac; } catch {}
+      if (ac && f.from && f.to) {
+        const done = arc(f.from, ac), left = arc(ac, f.to), pct = Math.max(0, Math.min(1, done / (done + left)));
+        const h = left / Math.max(ac.gs * 1.852, 1), eta = h < 1 ? Math.round(h * 60) + ' min' : Math.floor(h) + 'h ' + String(Math.round(h % 1 * 60)).padStart(2, '0') + 'm';
+        const bar = el('div', null, 'bar'), fill = el('i'); fill.style.width = (pct * 100).toFixed(0) + '%'; bar.append(fill);
+        info.append(el('div', `● In the air · ${Math.round(pct * 100)}% flown · about ${eta} to land · ${Math.round(ac.alt).toLocaleString()} ft`, 'live'), bar);
+      } else if (ac) info.append(el('div', `● In the air · ${Math.round(ac.alt).toLocaleString()} ft`, 'live'));
+      else info.append(el('small', 'Not in the air right now'));
+      card.append(info);
+      return card;
+    }));
+    $('v-flights').replaceChildren(...cards);
+  }
+
+  // ---------- sign in ----------
+  async function enter() {
+    const { role } = await call('/admin/check', 'POST');
+    $('login').hidden = true;
+    if (role === 'admin') { trip = await call('/admin/status', 'GET'); $('edit').hidden = false; fill(); }
+    else { $('view').hidden = false; await drawView(); setInterval(() => drawView().catch(() => {}), 30_000); }
+  }
+  $('login').onsubmit = async e => {
+    e.preventDefault(); pw = $('pw').value;
+    try { await enter(); sessionStorage.setItem('pw', pw); $('pw').value = ''; }
+    catch (err) { msg('login-msg', err.message, 'bad'); pw = ''; }
+  };
+  document.querySelectorAll('.signout').forEach(b => b.onclick = () => { sessionStorage.removeItem('pw'); location.reload(); });
+  if (pw) enter().catch(() => { sessionStorage.removeItem('pw'); pw = ''; });
+</script>
+</body>
+</html>

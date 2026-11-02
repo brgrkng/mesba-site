@@ -50,7 +50,7 @@
          border: 1px solid color-mix(in oklch, var(--live) 50%, transparent); }
   .vac:hover, .vac:focus-visible { border-color: var(--live); outline: none; }
   .vac[hidden] { display: none; }
-  .hero-copy .mono { margin-top: 22px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .hero-copy .mono:not(.vac) { margin-top: 22px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .hint { position: absolute; right: 16px; bottom: 20px; color: var(--dim); pointer-events: none; transition: opacity .3s; }
   @media (max-width: 700px) { .hint { display: none; } }
@@ -1049,7 +1049,8 @@ const tour = { i: 0, want: 0, state: 'spin', next: Infinity, auto: !reduce };
 const STAGE = new THREE.Vector3(-.4, .18, .9).normalize();
 const STATION = STAGE.clone().add(new THREE.Vector3(-.45, .5, .05)).normalize().multiplyScalar(2.55);
 const CAM_DIR = new THREE.Vector3(-.1, .3, 1).normalize();
-const stageAz = (() => { const v = STAGE.clone().applyQuaternion(earthTilt.quaternion.clone().invert()); return Math.atan2(v.x, v.z); })();
+const TILT = earthTilt.quaternion.clone(), tiltGoal = TILT.clone();   // the axial tilt, and the tilt that puts the stop on the stage
+const stageAz = (() => { const v = STAGE.clone().applyQuaternion(TILT.clone().invert()); return Math.atan2(v.x, v.z); })();
 function localDir(lat, lon, out) {                   // matches SphereGeometry's UVs: u = 0 at 180°W
   const th = (90 - lat) * D2R, ph = (lon + 180) * D2R;
   return out.set(-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th));
@@ -1355,6 +1356,9 @@ function applyStop() {
   localDir(st.lat, st.lon, stopLocal);
   const d = stageAz - Math.atan2(stopLocal.x, stopLocal.z) - earth.rotation.y;
   spinGoal = earth.rotation.y + Math.atan2(Math.sin(d), Math.cos(d));   // the shortest way round
+  // the spin only fixes longitude: also nod the globe north or south so the place itself lands on the stage
+  const w = stopLocal.clone().applyAxisAngle(UP, spinGoal).applyQuaternion(TILT);
+  tiltGoal.setFromUnitVectors(w, STAGE).multiply(TILT);
   spotR.value = st.r; heroK.value = st.heroes ? 1 : 0;
   drawHighlight(); showStop(st);
 }
@@ -1377,9 +1381,11 @@ function updateTour(t, dt) {
       tour.i = tour.want; applyStop(); tour.state = 'spin';
     }
   } else if (tour.state === 'spin') {
-    const d = spinGoal - earth.rotation.y;
-    earth.rotation.y += reduce ? d : d * (1 - Math.exp(-dt * 3.2));
-    if (Math.abs(d) < .01) { earth.rotation.y = spinGoal; tour.state = 'in'; tour.next = t + DWELL; }
+    const d = spinGoal - earth.rotation.y, k = reduce ? 1 : 1 - Math.exp(-dt * 3.2);
+    earth.rotation.y += d * k; earthTilt.quaternion.slerp(tiltGoal, k);
+    if (Math.abs(d) < .01 && earthTilt.quaternion.angleTo(tiltGoal) < .01) {
+      earth.rotation.y = spinGoal; earthTilt.quaternion.copy(tiltGoal); tour.state = 'in'; tour.next = t + DWELL;
+    }
   } else {
     moonK.value = Math.min(1, moonK.value + dt * 1.6);
     const bar = dotsEl.children[tour.i];
@@ -1417,7 +1423,7 @@ fetch('tz.json').then(r => r.json()).then(zones => {
 }).catch(() => {});
 
 applyStop();
-earth.rotation.y = spinGoal;                         // start already facing the first stop
+earth.rotation.y = spinGoal; earthTilt.quaternion.copy(tiltGoal);   // start already facing the first stop
 loadMap();
 // open on the wide shot, then fly in to the tour
 if (reduce) camera.position.copy(CAM_DIR).multiplyScalar(stageW < 700 ? 7.4 : 5.6);
@@ -1474,7 +1480,7 @@ function frame() {
         .multiplyScalar(focus.r * (focus.id === 'earth' ? 4.6 : 7) + .6)).add(new THREE.Vector3(0, focus.r * 1.2, 0));
       controls.target.lerp(p, k);
     } else if (spotSel) {
-      finalT.copy(stopLocal).applyAxisAngle(UP, tour.state === 'spin' ? spinGoal : earth.rotation.y).applyQuaternion(earthTilt.quaternion);
+      finalT.copy(stopLocal).applyAxisAngle(UP, tour.state === 'spin' ? spinGoal : earth.rotation.y).applyQuaternion(tour.state === 'spin' ? tiltGoal : earthTilt.quaternion);
       goal.copy(finalT).addScaledVector(CAM_DIR, .35).normalize().multiplyScalar((stageW < 700 ? 1.95 : 1.6) + spotR.value * 2.2);
       controls.target.lerp(finalT, k);
     } else { goal.copy(CAM_DIR).multiplyScalar(stageW < 700 ? 7.4 : 5.6); controls.target.lerp(new THREE.Vector3(), k); }

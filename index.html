@@ -434,7 +434,7 @@
 
 <footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur
   <div class="credits">Earth: NASA Blue Marble &amp; Black Marble · Clouds: contains modified EUMETSAT data (live-cloud-maps) ·
-    Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
+    Winds: Open-Meteo · Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
 
 <!-- pages: hash routing, one view at a time -->
 <script>
@@ -671,11 +671,13 @@ function drawHighlight(force) {
 const SMALL = innerWidth < 700, RES = SMALL ? '-2k' : '', MONTH = String(new Date().getUTCMonth() + 1).padStart(2, '0');
 const dayU = { value: null }, nightU = { value: null }, cloudU = { value: null };
 const realK = { value: 0 }, nightK = { value: 0 }, cloudK = { value: 0 };   // 0..1 fade-ins
+const windU = { value: null }, windK = { value: 0 }, flowU = { value: 0 };   // today's winds, and the clouds' time-lapse clock
 const fading = [];
 function loadTex(url, srgb, slot, k, onDone) {
   new THREE.TextureLoader().load(url, t => {
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = THREE.RepeatWrapping;                 // wraps at the date line (the clouds drift across it)
     slot.value = t; fading.push(k); onDone && onDone();
   }, undefined, () => { /* keep the generated look */ });
 }
@@ -755,18 +757,25 @@ earthTilt.add(earth);
 scene.add(earthTilt);
 
 const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR, uCloud: cloudU, uCloudK: cloudK },
+  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR, uCloud: cloudU, uCloudK: cloudK,
+              uWind: windU, uWindK: windK, uFlow: flowU },
   transparent: true, depthWrite: false,
   vertexShader: VERT,
   fragmentShader: NOISE + /* glsl */`
     uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
-    uniform sampler2D uCloud; uniform float uCloudK;
+    uniform sampler2D uCloud; uniform float uCloudK; uniform sampler2D uWind; uniform float uWindK; uniform float uFlow;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun);
       float c = uCloudK < .999 ? fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006)) : 0.;
+      // today's winds carry today's clouds, 12 hours of weather every 10 seconds. Two staggered copies each drift and
+      // fade out in turn, so the clouds keep flowing but never wander more than 6 hours of wind from where they are.
+      vec2 w = (texture2D(uWind, vUv).rg - .5) * 100.;                                    // m/s east, north
+      vec2 perHour = w * 3600. / 111320. / vec2(360. * max(cos((vUv.y - .5) * 3.1416), .2), 180.) * uWindK;
+      float p1 = fract(uFlow / 10. + noise(vObj * 3.)), p2 = fract(p1 + .5);
+      float s1 = texture2D(uCloud, vUv - perHour * (p1 - .5) * 12.).r, s2 = texture2D(uCloud, vUv - perHour * (p2 - .5) * 12.).r;
       // today's clouds (white); clear desert reads mid-grey in the source, so the low end is cut away
-      float real = smoothstep(.38, .9, texture2D(uCloud, vUv).r);
+      float real = smoothstep(.38, .9, mix(s1, s2, abs(2. * p1 - 1.)));
       float a = mix(smoothstep(.5, .72, c) * .85, real * .92, uCloudK);
       float lit = max(dot(N, L), 0.);
       float area = smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK;
@@ -779,7 +788,8 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
 }));
 earth.add(clouds);
 // real clouds sit where they really are: once they arrive, the cloud layer stops drifting and lines up with the map
-loadTex(`https://clouds.matteason.co.uk/images/${SMALL ? '2048x1024' : '4096x2048'}/clouds.jpg`, false, cloudU, cloudK,
+const CLOUDS = `https://clouds.matteason.co.uk/images/${SMALL ? '2048x1024' : '4096x2048'}/clouds.jpg`;
+loadTex(CLOUDS, false, cloudU, cloudK,
         () => { clouds.rotation.y = 0; });
 
 // the moonlit section's thin rim (like an observer's frame) and the heroes in it, on a shell above the clouds
@@ -1252,6 +1262,25 @@ async function checkTrip() {
 }
 $('vac').onclick = () => goTo(LIVE_I, true);
 if (FLIGHTS_URL) { checkTrip(); setInterval(checkTrip, 60_000); }
+
+// ---- the weather keeps up: today's winds (via the Worker), and fresh clouds every hour for a page left open ----
+async function loadWind() {
+  try {
+    const { w, h, uv } = await (await fetch(`${FLIGHTS_URL}/wind`)).json();
+    const px = new Uint8Array(w * h * 4);
+    uv.forEach((x, i) => { px[(i >> 1) * 4 + (i & 1)] = Math.round(Math.min(Math.max(x / 100 + .5, 0), 1) * 255); });
+    const t = new THREE.DataTexture(px, w, h);
+    t.wrapS = THREE.RepeatWrapping; t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+    windU.value?.dispose(); windU.value = t;
+    if (!windK.value) fading.push(windK);
+  } catch { /* no wind: the clouds just hold still */ }
+}
+if (FLIGHTS_URL) loadWind();
+setInterval(() => {
+  const old = cloudU.value;
+  loadTex(CLOUDS, false, cloudU, cloudK, () => old?.dispose());
+  if (FLIGHTS_URL) loadWind();
+}, 36e5);
 // routes come from adsbdb through the Worker; a route only counts if the plane is plausibly on it right now
 const routes = new Map();                            // callsign -> pending promise, then route | null
 function getRoute(cs) {
@@ -1460,7 +1489,7 @@ function frame() {
   const raw = clock.getDelta(), dt = Math.min(raw, .05), t = clock.elapsedTime;
   timeU.value = t;
   motion += ((focus || reduce ? 0 : 1) - motion) * Math.min(1, dt * 2);
-  if (!cloudU.value) clouds.rotation.y += dt * .01 * motion;
+  if (!cloudU.value) clouds.rotation.y += dt * .01 * motion; else flowU.value += dt * motion;
   for (const k of fading) k.value = Math.min(1, k.value + Math.min(raw, .25) * .7);
   PROJECTS.forEach(p => p.a += dt * p.sp * motion);
   const rdt = Math.min(raw, .25);                   // real time, so transitions keep pace on slow machines

@@ -8,6 +8,7 @@
 //   GET /route?cs=QTR816            ->  { route: { airline, from: { iata, city, lat, lon }, to: {...} } | null }
 //   GET /callsign?cs=MAS1           ->  { ac: { lat, lon, trk, gs, alt, cs, t } | null }   (that flight, if airborne)
 //   GET /vacation                   ->  the trip, if Mesba has made it public: { on, place, until, flights: [...] }
+//   GET /wind                       ->  { at, w: 30, h: 15, uv: [u, v, ...] }  winds at 700 hPa in m/s, 12° grid, rows south to north
 // Private (same-origin page at a secret path, password in the Authorization header). Two passwords, two roles:
 // ADMIN_PASSWORD edits the trip; VIEWER_PASSWORD (for his girlfriend) only reads it, public or not.
 //   GET  /<ADMIN_PATH>              ->  the sign-in page; any other unknown path is a plain 404
@@ -132,6 +133,30 @@ function cleanTrip(t) {
   };
 }
 
+// ---- today's winds at 700 hPa (about 3 km up, where weather clouds are steered), from Open-Meteo (CC BY 4.0) ----
+// One upstream call every 3 hours for everyone: the grid is kept in KV, and the old one is served if Open-Meteo fails.
+async function wind(env) {
+  const old = JSON.parse((await env.VACATION.get('wind')) || 'null');
+  if (old && Date.now() - old.at < 3 * 36e5) return JSON.stringify(old);
+  const lat = [], lon = [];
+  for (let j = 0; j < 15; j++) for (let i = 0; i < 30; i++) { lat.push(-84 + j * 12); lon.push(-174 + i * 12); }
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                          '&current=wind_speed_700hPa,wind_direction_700hPa&wind_speed_unit=ms', { headers: UA });
+    if (!r.ok) throw new Error('open-meteo ' + r.status);
+    const uv = (await r.json()).flatMap(({ current: c }) => {        // direction is where it blows from
+      const a = c.wind_direction_700hPa * Math.PI / 180, s = c.wind_speed_700hPa;
+      return [Math.round(-s * Math.sin(a) * 10) / 10, Math.round(-s * Math.cos(a) * 10) / 10];
+    });
+    const now = { at: Date.now(), w: 30, h: 15, uv };
+    await env.VACATION.put('wind', JSON.stringify(now));
+    return JSON.stringify(now);
+  } catch (e) {
+    if (old) return JSON.stringify(old);
+    throw e;
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), path = url.pathname;
@@ -179,6 +204,7 @@ export default {
         const t = env.VACATION ? JSON.parse((await env.VACATION.get('trip')) || '{}') : {};
         body = JSON.stringify(t.public ? { on: t.on, place: t.place, until: t.until, flights: t.flights } : { on: false, flights: [] });
       }
+      else if (path === '/wind') body = await remember('wind', 6e5, () => wind(env));
       else return notFound();
       if (body === null) return new Response('bad request', { status: 400, headers: cors });
       return new Response(body, { headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=10' } });

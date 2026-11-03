@@ -864,9 +864,17 @@ const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 48), new THREE.S
     uniform vec3 uSun; varying vec3 vObj; varying vec3 vN; varying vec3 vW;
     void main(){
       vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
-      float rim = pow(clamp(1. + dot(N, V) * 1.0, 0., 1.), 4.);   // BackSide: strongest at the limb
-      float lit = smoothstep(-.35, .6, dot(N, normalize(uSun)));
-      gl_FragColor = vec4(vec3(.3, .58, 1.) * rim * lit * .9, 1.);
+      // BackSide: x is 0 at the shell's outer edge and about .3 at Earth's limb. Strongest near the edge, but fading out
+      // over the last stretch, so the air ends softly instead of as a hard ring
+      float x = clamp(-dot(N, V), 0., 1.);
+      float rim = smoothstep(0., .1, x) * pow(1. - x, 4.);
+      vec3 L = normalize(uSun);
+      float lit = smoothstep(-.35, .6, dot(N, L));
+      // facing the sun with Earth in the way, the air on the rim is lit from behind: an eclipse ring, red-orange low down
+      // and blue at its outer edge, like the photos of Earth eclipsing the sun
+      float back = pow(max(dot(-V, L), 0.), 6.);
+      vec3 tint = mix(vec3(.3, .58, 1.), vec3(1., .38, .1), back * smoothstep(.04, .22, x));
+      gl_FragColor = vec4(tint * rim * (lit + back * .8) * .9, 1.);
     }`
 }));
 scene.add(atmo);
@@ -1551,7 +1559,10 @@ function frame() {
   tmp.copy(sunPos).project(camera);
   // fade by how directly we face the sun, so it never pops or flips when the sun passes behind the camera
   const facing = camera.getWorldDirection(look).dot(SUN_DIR);
-  sunGlow.style.opacity = THREE.MathUtils.smoothstep(facing, .2, .6);
+  // the glow is an overlay, so it can't be hidden by Earth on its own: fade it while Earth covers the sun
+  const dE = camera.position.length(), earthR = Math.asin(Math.min(1, 1 / dE));
+  const fromEarth = Math.acos(THREE.MathUtils.clamp(cand.copy(camera.position).negate().divideScalar(dE).dot(look.copy(sunPos).sub(camera.position).normalize()), -1, 1));
+  sunGlow.style.opacity = THREE.MathUtils.smoothstep(facing, .2, .6) * THREE.MathUtils.smoothstep(fromEarth, earthR * .95, earthR * 1.25);
   if (facing > .2) sunGlow.style.transform = `translate(${(tmp.x * .5 + .5) * stage.clientWidth}px, ${(-tmp.y * .5 + .5) * stage.clientHeight}px)`;
 
   composer.render();

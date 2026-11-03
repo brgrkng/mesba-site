@@ -739,10 +739,11 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 col = alb * max(NdL, 0.) * 1.7;
       // terminator: warm scattered band where day meets night
       col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land);
-      // sun glint on water + bright subsolar spot
+      // sun glint on water + bright subsolar spot. As the sun gets low its light crosses more air, so the glint fades and
+      // reddens toward the terminator instead of switching off there (a hard on/off drew a sharp line across the ocean)
       vec3 H = normalize(L + V + 1e-5);
-      float water = (1. - land) * (1. - ice);
-      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * vec3(1., .9, .75) * step(0., NdL);
+      float water = (1. - land) * (1. - ice), low = smoothstep(0., .35, NdL);
+      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * mix(vec3(1., .45, .2), vec3(1., .9, .75), low) * low;
       col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
       // city lights on the night side
       float night = smoothstep(.12, -.18, NdL);

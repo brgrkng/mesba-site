@@ -113,6 +113,14 @@
   .dots button:hover::before, .dots button:focus-visible::before { top: 8px; height: 5px; }
   .dots button:focus-visible { outline: none; }
   @media (max-width: 640px) { .tour { padding: 16px; } .tour h3 { font-size: 28px; } .tour p { font-size: 14px; min-height: 0; } }
+  /* phones: the live stop is just the flight's name and a small switcher, so the card leaves the globe in view */
+  .flt-nav { display: none; }
+  @media (max-width: 640px) {
+    .tour.live p, .tour.live .traffic, .tour.live .flights { display: none; }
+    .tour.live .flt-nav:not([hidden]) { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .flt-nav button { width: 30px; height: 26px; padding: 0; cursor: pointer; color: var(--ink); background: none; border: 1px solid var(--line); font: inherit; }
+    .flt-nav button:hover, .flt-nav button:focus-visible { border-color: var(--accent); outline: none; }
+  }
   .pill.place { border-color: color-mix(in oklch, var(--accent) 60%, transparent); }
   .pill.place::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%;
                         background: var(--accent); box-shadow: 0 0 8px var(--accent); vertical-align: 1px; }
@@ -304,6 +312,9 @@
       <p id="t-body"></p>
       <div class="traffic mono" id="t-traffic" hidden></div>
       <div class="flights" id="t-flights" role="group" aria-label="Switch flight" hidden></div>
+      <div class="flt-nav mono" id="t-fnav" role="group" aria-label="Switch flight" hidden>
+        <button id="f-prev" aria-label="Previous flight">‹</button><span id="f-num"></span><button id="f-next" aria-label="Next flight">›</button>
+      </div>
       <div class="tour-nav">
         <button id="t-prev" aria-label="Previous place">←</button>
         <div class="dots" id="t-dots"></div>
@@ -1236,6 +1247,9 @@ function showStop(st) {
     getRoute(a.cs).then(() => { const r = routeFor(a); via.textContent = r ? `${r.from.iata} → ${r.to.iata}` : ''; });
     return b;
   }));
+  tourEl.classList.toggle('live', !!st.live);
+  $('t-fnav').hidden = fl.hidden;
+  $('f-num').textContent = `${liveList.findIndex(a => a.cs === livePlane?.cs) + 1} / ${liveList.length}`;
   tourEl.classList.remove('swap'); void tourEl.offsetWidth; tourEl.classList.add('swap');
 }
 // ---- the live stop: a real aircraft cruising near the visitor (else over Bangladesh, else London) ----
@@ -1404,6 +1418,8 @@ function switchFlight(i) {
   if (spotSel) flying = true;
 }
 $('t-flights').onclick = e => { const b = e.target.closest('button'); if (b) switchFlight(+b.dataset.i); };
+const stepFlight = k => switchFlight((liveList.findIndex(a => a.cs === livePlane?.cs) + k + liveList.length) % liveList.length);
+$('f-prev').onclick = () => stepFlight(-1); $('f-next').onclick = () => stepFlight(1);
 
 function applyStop() {
   const st = STOPS[tour.i];

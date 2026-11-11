@@ -457,7 +457,7 @@
 
 <footer><div class="wrap mono">© 2026 MD Mesbahur Rahman · Kuala Lumpur
   <div class="credits">Earth: NASA Blue Marble &amp; Black Marble · Clouds: contains modified EUMETSAT data (live-cloud-maps) ·
-    Winds: Open-Meteo · Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
+    Terrain: GEBCO · Winds: Open-Meteo · Borders: Natural Earth · Flights: adsb.lol, adsbdb</div></div></footer>
 
 <!-- pages: hash routing, one view at a time -->
 <script>
@@ -724,6 +724,7 @@ const SMALL = innerWidth < 700, RES = SMALL ? '-2k' : '', MONTH = String(new Dat
 const dayU = { value: null }, nightU = { value: null }, cloudU = { value: null };
 const realK = { value: 0 }, nightK = { value: 0 }, cloudK = { value: 0 };   // 0..1 fade-ins
 const windU = { value: null }, windK = { value: 0 }, flowU = { value: 0 };   // today's winds, and the clouds' time-lapse clock
+const reliefU = { value: null }, reliefK = { value: 0 };   // real terrain: slopes built from NASA's GEBCO elevation map
 const fading = [];
 function loadTex(url, srgb, slot, k, onDone) {
   new THREE.TextureLoader().load(url, t => {
@@ -735,15 +736,16 @@ function loadTex(url, srgb, slot, k, onDone) {
 }
 loadTex(`earth/day-${MONTH}${RES}.jpg`, true, dayU, realK);
 loadTex(`earth/night${RES}.jpg`, false, nightU, nightK);
+loadTex(`earth/relief${RES}.jpg`, false, reliefU, reliefK);
 
 const earthMat = new THREE.ShaderMaterial({
   uniforms: { uSun: sunU, uSunLocal: { value: sunLocal }, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
               uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU,
               uDay: dayU, uNight: nightU, uCloud: cloudU, uRealK: realK, uNightK: nightK, uCloudK: cloudK,
-              uWind: windU, uWindK: windK, uFlow: flowU },
+              uWind: windU, uWindK: windK, uFlow: flowU, uRelief: reliefU, uReliefK: reliefK },
   vertexShader: VERT,
   fragmentShader: NOISE + SPOT + HAZE + CLOUD + /* glsl */`
-    uniform vec3 uSun; uniform vec3 uSunLocal;
+    uniform vec3 uSun; uniform vec3 uSunLocal; uniform sampler2D uRelief; uniform float uReliefK;
     uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
     uniform sampler2D uDay; uniform sampler2D uNight;
     uniform float uRealK; uniform float uNightK;
@@ -764,8 +766,13 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 off = (Ls - P * mu) * .006 / max(mu, .2) * smoothstep(-.05, .15, mu);
       float cl = cloudAt(vUv + vec2(dot(off, E) / (6.2832 * max(length(P.xz), .2)), dot(off, Nt) / 3.1416), P) * uCloudK;
       float shade = 1. - cl * .55;
+      // terrain: the real slope east and north (relief map: c = .5 + .5 sign(s) sqrt(|s| / .5)), heightened 14x so mountains
+      // read from orbit. Slopes facing the sun light up, the far sides fall into shade, strongest when the sun is low
+      vec2 e = texture2D(uRelief, vUv).rg * 2. - 1., slope = sign(e) * e * e * .5;
+      vec3 Nr = normalize(P - (slope.x * E + slope.y * Nt) * 14. * uReliefK);
+      float lambert = max(dot(Nr, Ls), 0.) * smoothstep(-.06, .02, NdL);   // peaks catch the sun just past the terminator
       // sunlight reddens as the sun gets low: it has crossed more air on the way down
-      vec3 col = alb * max(NdL, 0.) * 1.7 * through(NdL) * shade;
+      vec3 col = alb * lambert * 1.7 * through(NdL) * shade;
       // sun glint on water + bright subsolar spot. As the sun gets low its light crosses more air, so the glint fades and
       // reddens toward the terminator instead of switching off there (a hard on/off drew a sharp line across the ocean)
       vec3 H = normalize(L + V + 1e-5);
@@ -1063,7 +1070,7 @@ const HQ = location.search.includes('hq');           // ?hq in the URL forces fu
 function adaptQuality(now) {
   if (HQ) return;
   if (!perfStart) perfStart = now;
-  if (++perfFrames < 10 || now - perfStart < 1500) return;   // time-based: on a very slow machine N frames take forever
+  if (++perfFrames < 3 || now - perfStart < 1500) return;    // time-based: at 1 fps, waiting for 10 frames took 10 s a step
   const fps = perfFrames / ((now - perfStart) / 1000);
   perfFrames = 0; perfStart = now;
   if (fps < 28) bloom.enabled = false;

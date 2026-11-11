@@ -614,7 +614,32 @@ const VERT = /* glsl */`
 const SPOT = /* glsl */`
   uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
   float spotArea(vec3 N){ return smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK; }`;
+// the air: Rayleigh scattering, about 5x stronger for blue than red, about .25 optical depth straight down (blue)
+const HAZE = /* glsl */`
+  const vec3 BETA = vec3(.175, .41, 1.) * .29;
+  // what's left of light that crosses the air at cosine mu to the vertical (flat-air approximation, capped at the horizon)
+  vec3 air(float mu){ return exp(-BETA / (max(mu, 0.) + .1)); }
+  // the same, white-balanced like a photo: white with the sun (or the camera) straight overhead, gold and red only when low
+  vec3 through(float mu){ return air(mu) / air(1.); }
+  // looking down through the air: the ground dims and blues out toward the limb, and the sunlit air itself glows blue
+  vec3 haze(vec3 col, vec3 N, vec3 V, vec3 L){
+    float v = dot(N, V), mu = dot(N, L);
+    return col * through(v) + (1. - air(v)) * through(mu) * smoothstep(-.15, .25, mu) * .3;
+  }`;
+// today's clouds at uv (p: the matching direction, for the flow phase). Today's winds carry them, 12 hours of weather every
+// 10 seconds: two staggered copies each drift and fade out in turn, so the clouds keep flowing but never wander more than
+// 6 hours of wind from where they are. Clear desert reads mid-grey in the source, so the low end is cut away.
+const CLOUD = /* glsl */`
+  uniform sampler2D uCloud; uniform float uCloudK; uniform sampler2D uWind; uniform float uWindK; uniform float uFlow;
+  float cloudAt(vec2 uv, vec3 p){
+    vec2 w = (texture2D(uWind, uv).rg - .5) * 100.;                                     // m/s east, north
+    vec2 perHour = w * 3600. / 111320. / vec2(360. * max(cos((uv.y - .5) * 3.1416), .2), 180.) * uWindK;
+    float p1 = fract(uFlow / 10. + noise(p * 3.)), p2 = fract(p1 + .5);
+    float s1 = texture2D(uCloud, uv - perHour * (p1 - .5) * 12.).r, s2 = texture2D(uCloud, uv - perHour * (p2 - .5) * 12.).r;
+    return smoothstep(.38, .9, mix(s1, s2, abs(2. * p1 - 1.)));
+  }`;
 const sunU = { value: SUN_DIR }, timeU = { value: 0 };
+const sunLocal = new THREE.Vector3();                 // the sun's direction in Earth's own frame (set in updateSun)
 // The Metavision moon mirrors sunlight onto Earth's night side. uSpot: direction Earth -> centre of the spotlight,
 // uMoonK: 0..1, spotlight strength (fades between stops), uSpotR: spotlight radius in radians, uHeroK: hero dots on/off.
 const spotU = { value: new THREE.Vector3(-1, 0, 0) }, moonK = { value: 0 }, spotR = { value: .3 }, heroK = { value: 0 };
@@ -712,15 +737,16 @@ loadTex(`earth/day-${MONTH}${RES}.jpg`, true, dayU, realK);
 loadTex(`earth/night${RES}.jpg`, false, nightU, nightK);
 
 const earthMat = new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
+  uniforms: { uSun: sunU, uSunLocal: { value: sunLocal }, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
               uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU,
-              uDay: dayU, uNight: nightU, uCloud: cloudU, uRealK: realK, uNightK: nightK, uCloudK: cloudK },
+              uDay: dayU, uNight: nightU, uCloud: cloudU, uRealK: realK, uNightK: nightK, uCloudK: cloudK,
+              uWind: windU, uWindK: windK, uFlow: flowU },
   vertexShader: VERT,
-  fragmentShader: SPOT + /* glsl */`
-    uniform vec3 uSun;
+  fragmentShader: NOISE + SPOT + HAZE + CLOUD + /* glsl */`
+    uniform vec3 uSun; uniform vec3 uSunLocal;
     uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
-    uniform sampler2D uDay; uniform sampler2D uNight; uniform sampler2D uCloud;
-    uniform float uRealK; uniform float uNightK; uniform float uCloudK;
+    uniform sampler2D uDay; uniform sampler2D uNight;
+    uniform float uRealK; uniform float uNightK;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun), V = normalize(cameraPosition - vW);
@@ -730,20 +756,28 @@ const earthMat = new THREE.ShaderMaterial({
       vec3 alb = mix(vec3(.003, .018, .06), texture2D(uDay, vUv).rgb * .62, uRealK);
 
       float NdL = dot(N, L);
-      vec3 col = alb * max(NdL, 0.) * 1.7;
+      // cloud shadows: the cloud between this spot and the sun. At night the offset shrinks to nothing, so the same
+      // sample is the cloud straight overhead, which dims the city lights
+      vec3 P = normalize(vObj), Ls = normalize(uSunLocal);
+      float mu = dot(P, Ls);
+      vec3 E = normalize(vec3(P.z, 0., -P.x) + vec3(1e-5, 0., 0.)), Nt = cross(P, E);   // east, north
+      vec3 off = (Ls - P * mu) * .006 / max(mu, .2) * smoothstep(-.05, .15, mu);
+      float cl = cloudAt(vUv + vec2(dot(off, E) / (6.2832 * max(length(P.xz), .2)), dot(off, Nt) / 3.1416), P) * uCloudK;
+      float shade = 1. - cl * .55;
+      // sunlight reddens as the sun gets low: it has crossed more air on the way down
+      vec3 col = alb * max(NdL, 0.) * 1.7 * through(NdL) * shade;
       // terminator: warm scattered band where day meets night
       col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land);
       // sun glint on water + bright subsolar spot. As the sun gets low its light crosses more air, so the glint fades and
       // reddens toward the terminator instead of switching off there (a hard on/off drew a sharp line across the ocean)
       vec3 H = normalize(L + V + 1e-5);
       float water = 1. - land, low = smoothstep(0., .35, NdL);
-      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * mix(vec3(1., .45, .2), vec3(1., .9, .75), low) * low;
-      col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
+      col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * mix(vec3(1., .45, .2), vec3(1., .9, .75), low) * low * shade;
+      col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55 * shade;
       // city lights on the night side
       float night = smoothstep(.12, -.18, NdL);
       float lights = texture2D(uNight, vUv).r;      // NASA Black Marble: where the lights really are
-      float cloudy = texture2D(uCloud, vUv).r * uCloudK;
-      col += night * lights * lights * 2.4 * uNightK * vec3(1., .66, .32) * (1. - smoothstep(.4, .9, cloudy) * .8);
+      col += night * lights * lights * 2.4 * uNightK * vec3(1., .66, .32) * (1. - cl * .8);
       // moonlight: sunlight bounced off the Metavision moon lights up a patch of the dark side
       float area = spotArea(N);
       float mlit = area * night;
@@ -753,10 +787,7 @@ const earthMat = new THREE.ShaderMaterial({
       col += (mp.g * ACC * .03 + mp.b * mlit * vec3(.55, .6, 1.) * .35) * uHasMap;
       // the current stop's countries light up in the accent colour, strongest inside the spotlight
       col += texture2D(uHl, vUv).r * uHasMap * ACC * (.03 + area * .5);
-      // thin blue limb on the lit side
-      float fres = pow(clamp(1. - dot(N, V), 0., 1.), 3.5);   // clamp: rounding can push dot(N,V) past 1, and pow(<0) is NaN on Chrome/ANGLE
-      col += fres * vec3(.25, .5, 1.) * smoothstep(-.25, .5, NdL) * 1.4;
-      gl_FragColor = vec4(col, 1.);
+      gl_FragColor = vec4(haze(col, N, V, L), 1.);
     }`
 });
 // axial tilt on a parent, spin on the Earth itself, so the axis stays put while it turns
@@ -771,29 +802,21 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
               uWind: windU, uWindK: windK, uFlow: flowU },
   transparent: true, depthWrite: false,
   vertexShader: VERT,
-  fragmentShader: NOISE + SPOT + /* glsl */`
+  fragmentShader: NOISE + SPOT + HAZE + CLOUD + /* glsl */`
     uniform vec3 uSun; uniform float uTime;
-    uniform sampler2D uCloud; uniform float uCloudK; uniform sampler2D uWind; uniform float uWindK; uniform float uFlow;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
-      vec3 N = normalize(vN), L = normalize(uSun);
+      vec3 N = normalize(vN), L = normalize(uSun), V = normalize(cameraPosition - vW);
       float c = uCloudK < .999 ? fbm(vObj * 2.6 + vec3(uTime * .01, 0., uTime * .006)) : 0.;
-      // today's winds carry today's clouds, 12 hours of weather every 10 seconds. Two staggered copies each drift and
-      // fade out in turn, so the clouds keep flowing but never wander more than 6 hours of wind from where they are.
-      vec2 w = (texture2D(uWind, vUv).rg - .5) * 100.;                                    // m/s east, north
-      vec2 perHour = w * 3600. / 111320. / vec2(360. * max(cos((vUv.y - .5) * 3.1416), .2), 180.) * uWindK;
-      float p1 = fract(uFlow / 10. + noise(vObj * 3.)), p2 = fract(p1 + .5);
-      float s1 = texture2D(uCloud, vUv - perHour * (p1 - .5) * 12.).r, s2 = texture2D(uCloud, vUv - perHour * (p2 - .5) * 12.).r;
-      // today's clouds (white); clear desert reads mid-grey in the source, so the low end is cut away
-      float real = smoothstep(.38, .9, mix(s1, s2, abs(2. * p1 - 1.)));
-      float a = mix(smoothstep(.5, .72, c) * .85, real * .92, uCloudK);
-      float lit = max(dot(N, L), 0.);
+      float a = mix(smoothstep(.5, .72, c) * .85, cloudAt(vUv, vObj) * .92, uCloudK);
+      float NdL = dot(N, L), lit = max(NdL, 0.);
       float area = spotArea(N);
-      float mlit = area * smoothstep(.1, -.15, dot(N, L));
-      vec3 col = vec3(.95) * (lit * 1.05 + .01) + exp(-dot(N, L) * dot(N, L) * 49.) * vec3(.6, .25, .08) * .2
+      float mlit = area * smoothstep(.1, -.15, NdL);
+      // sunlit tops turn gold, then pink, toward the terminator: their light has crossed more air
+      vec3 col = vec3(.95) * (lit * 1.05 * through(NdL) + .01) + exp(-NdL * NdL * 49.) * vec3(.6, .25, .08) * .2
                + vec3(.5, .55, .75) * mlit * .7;
       // clear skies under the spotlight, so the country underneath shows
-      gl_FragColor = vec4(col, a * max(.15 + .85 * smoothstep(-.2, .2, dot(N, L)), mlit) * (1. - area * .8));
+      gl_FragColor = vec4(haze(col, N, V, L), a * max(.15 + .85 * smoothstep(-.2, .2, dot(N, L)), mlit) * (1. - area * .8));
     }`
 }));
 earth.add(clouds);
@@ -850,24 +873,26 @@ const beam = new THREE.Mesh(new THREE.CylinderGeometry(.15, .42, 1, 48, 1, true)
 }));
 scene.add(beam);
 
-const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.045, 96, 48), new THREE.ShaderMaterial({
+// the air beyond the limb: a thin shell (about 190 km; most of the glow is in the lowest few tens of km, as in photos from orbit)
+const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.03, 96, 48), new THREE.ShaderMaterial({
   uniforms: { uSun: sunU }, side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   vertexShader: VERT,
-  fragmentShader: /* glsl */`
-    uniform vec3 uSun; varying vec3 vObj; varying vec3 vN; varying vec3 vW;
+  fragmentShader: HAZE + /* glsl */`
+    uniform vec3 uSun; varying vec3 vW;
     void main(){
-      vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
-      // BackSide: x is 0 at the shell's outer edge and about .3 at Earth's limb. Strongest near the edge, but fading out
-      // over the last stretch, so the air ends softly instead of as a hard ring
-      float x = clamp(-dot(N, V), 0., 1.);
-      float rim = smoothstep(0., .1, x) * pow(1. - x, 4.);
-      vec3 L = normalize(uSun);
-      float lit = smoothstep(-.35, .6, dot(N, L));
-      // facing the sun with Earth in the way, the air on the rim is lit from behind: an eclipse ring, red-orange low down
-      // and blue at its outer edge, like the photos of Earth eclipsing the sun
-      float back = pow(max(dot(-V, L), 0.), 6.);
-      vec3 tint = mix(vec3(.3, .58, 1.), vec3(1., .38, .1), back * smoothstep(.04, .22, x));
-      gl_FragColor = vec4(tint * rim * (lit + back * .8) * .9, 1.);
+      // how close the line of sight skims Earth sets how much air it crosses
+      vec3 V = normalize(vW - cameraPosition), L = normalize(uSun);
+      vec3 C = cameraPosition + V * max(-dot(cameraPosition, V), 0.);
+      float h = clamp((length(C) - 1.) / .03, 0., 1.);        // 0 grazing the ground, 1 at the top of the shell
+      float dens = exp(-h * 4.) * smoothstep(1., .5, h);       // thins out with height and ends softly
+      float mu = dot(normalize(C), L);
+      // sunlit air is blue; toward the terminator the light reaching it has crossed so much air that it turns orange
+      vec3 col = BETA * 3.4 * through(mu) * smoothstep(-.3, .15, mu);
+      // facing the sun with Earth in the way, the air is lit from behind: an eclipse ring, red-orange low down and blue
+      // higher up, like the photos of Earth eclipsing the sun
+      float back = pow(max(dot(V, L), 0.), 8.);
+      col += mix(vec3(1., .38, .1), vec3(.3, .58, 1.), smoothstep(0., .5, h)) * back * .8;
+      gl_FragColor = vec4(col * dens * 1.2, 1.);
     }`
 }));
 scene.add(atmo);
@@ -1446,7 +1471,6 @@ function updateTour(t, dt) {
 }
 // ---- real time of day: the sun sits over the point on Earth where it is overhead right now ----
 // Earth and sun turn together (the slow spin, the tour), so day and night on the globe always match the clock.
-const sunLocal = new THREE.Vector3();
 function updateSun(now = new Date()) {
   const day = (now - Date.UTC(now.getUTCFullYear(), 0, 0)) / 864e5;                       // day of the year
   const decl = -23.44 * Math.cos(2 * Math.PI / 365 * (day + 10));                          // solar declination, degrees

@@ -33,6 +33,7 @@
     --accent: oklch(0.66 0.19 278); --sun: oklch(0.86 0.13 75); --live: oklch(0.72 0.17 160);
   }
   * { box-sizing: border-box; }
+  [hidden]:not(.tour):not(.panel) { display: none !important; }   /* the tour card and panel fade out instead */
   html { scroll-behavior: smooth; scrollbar-color: var(--accent) var(--bg); }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Archivo, system-ui, sans-serif; overflow-x: hidden; }
   a { color: inherit; }
@@ -59,14 +60,13 @@
   /* sun glow: one fixed-size layer, moved with transform/opacity only (no repaints) */
   .sunglow { position: absolute; left: 0; top: 0; width: 90vmax; height: 90vmax; margin: -45vmax 0 0 -45vmax; pointer-events: none; opacity: 0;
              background: radial-gradient(circle, oklch(0.95 0.08 80 / .5), oklch(0.8 0.12 60 / .12) 20%, transparent 50%); will-change: transform, opacity; }
-  #space canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; }
+  #space canvas { display: block; width: 100%; height: 100%; cursor: grab; }
   #space canvas:active { cursor: grabbing; }
   .hero-copy { position: absolute; z-index: 2; left: 0; right: 0; top: 104px; pointer-events: none; transition: opacity .5s; }
   .hero-copy h1 { font-size: clamp(54px, 10vw, 128px); text-transform: uppercase; }
   .vac { margin-top: 16px; padding: 8px 12px; pointer-events: auto; cursor: pointer; color: var(--ink); background: color-mix(in oklch, var(--live) 12%, var(--bg));
          border: 1px solid color-mix(in oklch, var(--live) 50%, transparent); }
   .vac:hover, .vac:focus-visible { border-color: var(--live); outline: none; }
-  .vac[hidden] { display: none; }
   .hero-copy .mono:not(.vac) { margin-top: 22px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
   .hint { position: absolute; right: 16px; bottom: 20px; color: var(--dim); pointer-events: none; transition: opacity .3s; }
@@ -74,7 +74,6 @@
   .flt-btn { position: absolute; z-index: 5; top: 84px; right: 16px; display: flex; align-items: center; gap: 10px; padding: 11px 16px;
              cursor: pointer; color: var(--ink); font: 500 12px/1 "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase;
              background: color-mix(in oklch, var(--bg) 85%, transparent); border: 1px solid var(--line); transition: border-color .2s, background .2s; }
-  .flt-btn[hidden] { display: none; }
   .flt-btn:hover, .flt-btn:focus-visible, .flt-btn[aria-pressed="true"] { border-color: var(--accent); outline: none; }
   .flt-btn[aria-pressed="true"] { background: color-mix(in oklch, var(--accent) 18%, var(--bg)); }
   .flt-btn svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
@@ -92,9 +91,7 @@
   .tour p { margin: 0; color: var(--muted); font-size: 15px; min-height: 4.8em; }
   .tour.swap h3, .tour.swap p, .tour.swap .tour-top span { animation: in .45s ease; }
   .traffic { margin-top: 10px; color: var(--sun); }
-  .traffic[hidden] { display: none; }
   .flights { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-  .flights[hidden] { display: none; }
   .flights button { padding: 6px 8px; cursor: pointer; text-align: left; color: var(--muted); background: none; border: 1px solid var(--line);
                     font: 500 11px/1.25 "IBM Plex Mono", monospace; letter-spacing: .04em; transition: border-color .2s, background .2s; }
   .flights button b { display: block; color: var(--ink); font-weight: 500; }
@@ -116,8 +113,8 @@
   /* phones: the live stop is just the flight's name and a small switcher, so the card leaves the globe in view */
   .flt-nav { display: none; }
   @media (max-width: 640px) {
-    .tour.live p, .tour.live .traffic, .tour.live .flights { display: none; }
-    .tour.live .flt-nav:not([hidden]) { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .tour.is-live p, .tour.is-live .traffic, .tour.is-live .flights { display: none; }
+    .tour.is-live .flt-nav:not([hidden]) { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
     .flt-nav button { width: 30px; height: 26px; padding: 0; cursor: pointer; color: var(--ink); background: none; border: 1px solid var(--line); font: inherit; }
     .flt-nav button:hover, .flt-nav button:focus-visible { border-color: var(--accent); outline: none; }
   }
@@ -152,13 +149,11 @@
   @media (max-width: 640px) { .panel { right: 16px; bottom: 56px; } .panel h3 { font-size: 28px; } }
 
   /* ---- sections ---- */
-  section { padding: 120px 0 0; }
   /* pages: one view at a time */
   main > [data-view]:not(#space) { padding-top: 140px; }
   .view-in { animation: page-in .5s ease both; }
   @keyframes page-in { from { opacity: 0; transform: translateY(14px); } }
   .pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 110px; padding-top: 28px; padding-bottom: 28px; border-top: 1px solid var(--line); }
-  .pager[hidden] { display: none; }
   .pager a { text-decoration: none; font-stretch: 68%; font-weight: 700; font-size: clamp(26px, 4vw, 44px); line-height: 1; transition: color .2s; }
   .pager a:hover { color: var(--accent); }
   .pager a:last-child { margin-left: auto; text-align: right; }
@@ -305,7 +300,7 @@
     </div></div>
     <div class="labels" id="labels"></div>
     <div class="hint mono" id="hint">Drag to orbit · scroll to zoom</div>
-    <button class="flt-btn" id="flt-btn" aria-pressed="false" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg><span id="flt-label">Live flights</span></button>
+    <button class="flt-btn" id="flt-btn" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg><span id="flt-label">Live flights</span></button>
     <aside class="tour" id="tour" aria-live="polite" aria-label="Places">
       <div class="tour-top mono"><span id="t-where"></span><b id="t-num"></b></div>
       <h3 id="t-title"></h3>
@@ -566,7 +561,7 @@ camera.position.copy(OVERVIEW);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.enablePan = false;
 // scroll (or pinch) to zoom: the home page is one screen, so the wheel isn't needed for scrolling there
-controls.enableZoom = true; controls.zoomSpeed = .6; controls.minDistance = 1.35; controls.maxDistance = 16;
+controls.zoomSpeed = .6; controls.minDistance = 1.35; controls.maxDistance = 16;
 canvas.style.touchAction = 'pan-y';           // OrbitControls sets 'none'; keep page scroll on phones
 
 // ---- sun: one light source, everything is lit from it ----
@@ -604,7 +599,7 @@ scene.add(sun, corona);
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.45, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: .9 })));
 }
 
-// ---- Earth: procedural shader, lit by the sun ----
+// ---- Earth: shader, lit by the sun ----
 const NOISE = /* glsl */`
   float hash(vec3 p){ p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
   float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
@@ -615,6 +610,10 @@ const VERT = /* glsl */`
   varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
   void main(){ vObj = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vUv = uv;
     vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+// 0..1: how far inside the moon's spotlight a surface normal points (shared by the Earth and cloud shaders)
+const SPOT = /* glsl */`
+  uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
+  float spotArea(vec3 N){ return smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK; }`;
 const sunU = { value: SUN_DIR }, timeU = { value: 0 };
 // The Metavision moon mirrors sunlight onto Earth's night side. uSpot: direction Earth -> centre of the spotlight,
 // uMoonK: 0..1, spotlight strength (fades between stops), uSpotR: spotlight radius in radians, uHeroK: hero dots on/off.
@@ -680,7 +679,7 @@ async function loadMap() {
     g.beginPath(); shapes.forEach(geo => trace(g, geo, MAP_W, MAP_H)); g.stroke();
     mapTex.needsUpdate = true; hasMapU.value = 1;
     drawHighlight(true);
-  } catch (e) { console.warn('country map unavailable, keeping the procedural Earth', e); }
+  } catch (e) { console.warn('country map unavailable: no borders or highlights', e); }
 }
 let hlDrawn = null;                                  // the country list currently in the mask
 function drawHighlight(force) {
@@ -695,7 +694,7 @@ function drawHighlight(force) {
 
 // ---- real imagery: NASA Blue Marble for this month, NASA Black Marble city lights, and today's clouds ----
 // (clouds: EUMETSAT satellites via live-cloud-maps, refreshed every 3 hours). Each fades in when it arrives;
-// until then the generated look stands in.
+// until then Earth is dark ocean and the clouds are generated.
 const SMALL = innerWidth < 700, RES = SMALL ? '-2k' : '', MONTH = String(new Date().getUTCMonth() + 1).padStart(2, '0');
 const dayU = { value: null }, nightU = { value: null }, cloudU = { value: null };
 const realK = { value: 0 }, nightK = { value: 0 }, cloudK = { value: 0 };   // 0..1 fade-ins
@@ -707,18 +706,18 @@ function loadTex(url, srgb, slot, k, onDone) {
     t.anisotropy = renderer.capabilities.getMaxAnisotropy();
     t.wrapS = THREE.RepeatWrapping;                 // wraps at the date line (the clouds drift across it)
     slot.value = t; fading.push(k); onDone && onDone();
-  }, undefined, () => { /* keep the generated look */ });
+  }, undefined, () => { /* stays faded out */ });
 }
 loadTex(`earth/day-${MONTH}${RES}.jpg`, true, dayU, realK);
 loadTex(`earth/night${RES}.jpg`, false, nightU, nightK);
 
 const earthMat = new THREE.ShaderMaterial({
-  uniforms: { uSun: sunU, uTime: timeU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
+  uniforms: { uSun: sunU, uSpot: spotU, uMoonK: moonK, uSpotR: spotR,
               uMap: { value: mapTex }, uHl: { value: hlTex }, uHasMap: hasMapU,
               uDay: dayU, uNight: nightU, uCloud: cloudU, uRealK: realK, uNightK: nightK, uCloudK: cloudK },
   vertexShader: VERT,
-  fragmentShader: NOISE + /* glsl */`
-    uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
+  fragmentShader: SPOT + /* glsl */`
+    uniform vec3 uSun;
     uniform sampler2D uMap; uniform sampler2D uHl; uniform float uHasMap;
     uniform sampler2D uDay; uniform sampler2D uNight; uniform sampler2D uCloud;
     uniform float uRealK; uniform float uNightK; uniform float uCloudK;
@@ -726,25 +725,9 @@ const earthMat = new THREE.ShaderMaterial({
     void main(){
       vec3 N = normalize(vN), L = normalize(uSun), V = normalize(cameraPosition - vW);
       vec4 mp = texture2D(uMap, vUv);
-      // the generated stand-in only costs anything until the real imagery has faded in
-      bool fake = uRealK < .999 || uHasMap < .5;
-      float n = fake ? fbm(vObj * 1.8 + vec3(1.7, .3, 4.1)) : .5;
-      float detail = fake ? fbm(vObj * 9.) : .5;
-      float lat = abs(vObj.y);
-      // real coastlines once the map has loaded, procedural continents until then
-      float land = mix(smoothstep(.505, .53, n), smoothstep(.25, .75, mp.r), uHasMap);
-      float coast = smoothstep(.47, .505, n) * (1. - land) * (1. - uHasMap);
-      vec3 ocean = mix(vec3(.003, .018, .06), vec3(.01, .06, .15), detail) + coast * vec3(.0, .05, .07);
-      vec3 green = mix(vec3(.03, .08, .02), vec3(.07, .12, .04), detail);
-      vec3 desert = vec3(.28, .21, .11);
-      float dry = mix(smoothstep(.2, .45, 1. - lat) * smoothstep(.55, .62, n + detail * .15),
-                      exp(-(lat - .4) * (lat - .4) * 60.) * smoothstep(.42, .58, n), uHasMap);   // deserts sit near 25° N/S
-      vec3 alb = mix(ocean, mix(green, desert, dry), land);
-      float ice = smoothstep(.88, .94, lat + (detail - .5) * .12);
-      alb = mix(alb, vec3(.75, .8, .85), ice);
-      // NASA Blue Marble: the real colour of the ground for this month (snow, deserts, forests, ocean depth)
-      alb = mix(alb, texture2D(uDay, vUv).rgb * .62, uRealK);
-      ice *= 1. - uRealK;
+      float land = smoothstep(.25, .75, mp.r) * uHasMap;   // real coastlines (no glint on land), once the map has loaded
+      // NASA Blue Marble: the real colour of the ground for this month (snow, deserts, forests, ocean depth); dark ocean until then
+      vec3 alb = mix(vec3(.003, .018, .06), texture2D(uDay, vUv).rgb * .62, uRealK);
 
       float NdL = dot(N, L);
       vec3 col = alb * max(NdL, 0.) * 1.7;
@@ -753,18 +736,16 @@ const earthMat = new THREE.ShaderMaterial({
       // sun glint on water + bright subsolar spot. As the sun gets low its light crosses more air, so the glint fades and
       // reddens toward the terminator instead of switching off there (a hard on/off drew a sharp line across the ocean)
       vec3 H = normalize(L + V + 1e-5);
-      float water = (1. - land) * (1. - ice), low = smoothstep(0., .35, NdL);
+      float water = 1. - land, low = smoothstep(0., .35, NdL);
       col += water * (pow(max(dot(N, H), 0.), 90.) * 2.6 + pow(max(dot(N, H), 0.), 12.) * .18) * mix(vec3(1., .45, .2), vec3(1., .9, .75), low) * low;
       col += pow(max(NdL, 0.), 40.) * vec3(1., .82, .55) * .55;
       // city lights on the night side
       float night = smoothstep(.12, -.18, NdL);
-      float cities = uNightK < .999 ? smoothstep(.72, .92, noise(vObj * 160.)) * smoothstep(.45, .7, noise(vObj * 12.)) * land * (1. - ice) : 0.;
       float lights = texture2D(uNight, vUv).r;      // NASA Black Marble: where the lights really are
       float cloudy = texture2D(uCloud, vUv).r * uCloudK;
-      col += night * mix(cities * 1.6, lights * lights * 2.4, uNightK) * vec3(1., .66, .32) * (1. - smoothstep(.4, .9, cloudy) * .8);
+      col += night * lights * lights * 2.4 * uNightK * vec3(1., .66, .32) * (1. - smoothstep(.4, .9, cloudy) * .8);
       // moonlight: sunlight bounced off the Metavision moon lights up a patch of the dark side
-      float m = acos(clamp(dot(N, normalize(uSpot)), -1., 1.));
-      float area = smoothstep(uSpotR, uSpotR * .35, m) * uMoonK;
+      float area = spotArea(N);
       float mlit = area * night;
       col += (alb * vec3(3.2, 3.4, 4.2) + vec3(.012, .016, .04)) * mlit;   // cool, moonlit tint
       // places I've been: a faint accent tint, always on; borders show up in the moonlight
@@ -790,8 +771,8 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
               uWind: windU, uWindK: windK, uFlow: flowU },
   transparent: true, depthWrite: false,
   vertexShader: VERT,
-  fragmentShader: NOISE + /* glsl */`
-    uniform vec3 uSun; uniform float uTime; uniform vec3 uSpot; uniform float uMoonK; uniform float uSpotR;
+  fragmentShader: NOISE + SPOT + /* glsl */`
+    uniform vec3 uSun; uniform float uTime;
     uniform sampler2D uCloud; uniform float uCloudK; uniform sampler2D uWind; uniform float uWindK; uniform float uFlow;
     varying vec3 vObj; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
     void main(){
@@ -807,7 +788,7 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
       float real = smoothstep(.38, .9, mix(s1, s2, abs(2. * p1 - 1.)));
       float a = mix(smoothstep(.5, .72, c) * .85, real * .92, uCloudK);
       float lit = max(dot(N, L), 0.);
-      float area = smoothstep(uSpotR, uSpotR * .35, acos(clamp(dot(N, normalize(uSpot)), -1., 1.))) * uMoonK;
+      float area = spotArea(N);
       float mlit = area * smoothstep(.1, -.15, dot(N, L));
       vec3 col = vec3(.95) * (lit * 1.05 + .01) + exp(-dot(N, L) * dot(N, L) * 49.) * vec3(.6, .25, .08) * .2
                + vec3(.5, .55, .75) * mlit * .7;
@@ -1086,9 +1067,9 @@ const STOPS = [
   { title: 'WellDev', where: 'Next', lat: 47.37, lon: 8.54, r: .1, countries: ['Switzerland'],
     body: 'Software engineering with Swiss roots and a team in Dhaka. The next stop on this map, and I am ready to join.' },
 ];
-// the last stop follows a real aircraft, live (needs the flights Worker; left out without it)
+// the last stop follows a real aircraft, live (through the flights Worker)
 const FLIGHTS_URL = location.hostname === '127.0.0.1' ? 'http://127.0.0.1:8787' : 'https://mesba-flights.mesba.workers.dev';   // worker/flights.js
-if (FLIGHTS_URL) STOPS.push({ title: 'Live flight', where: 'Live', lat: 0, lon: 0, r: .05, countries: [], live: true, body: '' });
+STOPS.push({ title: 'Live flight', where: 'Live', lat: 0, lon: 0, r: .05, countries: [], live: true, body: '' });
 const DWELL = 9;                                     // seconds per stop
 const tour = { i: 0, want: 0, state: 'spin', next: Infinity, auto: !reduce };
 
@@ -1182,7 +1163,7 @@ async function loadTraffic() {
   } catch { el.hidden = true; }
 }
 function updateTraffic(t, dt) {
-  if (!FLIGHTS_URL || !spotSel || tour.state !== 'in') {
+  if (!spotSel || tour.state !== 'in') {
     if (aircraft.length || acFor >= 0) { aircraft = []; acFor = -1; $('t-traffic').hidden = true; }
     acPlanes.visible = acTrails.visible = false;
     return;
@@ -1221,7 +1202,6 @@ $('t-prev').onclick = () => goTo(tour.i - 1, true);
 $('t-next').onclick = () => goTo(tour.i + 1, true);
 // the Live flights button: jump to the tracker and stay there until you leave or press it again
 const fltBtn = $('flt-btn'), LIVE_I = STOPS.findIndex(st => st.live);
-fltBtn.hidden = LIVE_I < 0;
 fltBtn.onclick = () => goTo(tour.stay ? tour.i + 1 : LIVE_I, true);
 function syncFltBtn() {
   fltBtn.setAttribute('aria-pressed', String(!!tour.stay));
@@ -1247,7 +1227,7 @@ function showStop(st) {
     getRoute(a.cs).then(() => { const r = routeFor(a); via.textContent = r ? `${r.from.iata} → ${r.to.iata}` : ''; });
     return b;
   }));
-  tourEl.classList.toggle('live', !!st.live);
+  tourEl.classList.toggle('is-live', !!st.live);
   $('t-fnav').hidden = fl.hidden;
   $('f-num').textContent = `${liveList.findIndex(a => a.cs === livePlane?.cs) + 1} / ${liveList.length}`;
   tourEl.classList.remove('swap'); void tourEl.offsetWidth; tourEl.classList.add('swap');
@@ -1301,7 +1281,7 @@ async function checkTrip() {
   if (myAir && !wasFlying) { liveAt = -1e9; goTo(LIVE_I, true); }   // he just took off (or the page just opened): show it
 }
 $('vac').onclick = () => goTo(LIVE_I, true);
-if (FLIGHTS_URL) { checkTrip(); setInterval(checkTrip, 60_000); }
+checkTrip(); setInterval(checkTrip, 60_000);
 
 // ---- the weather keeps up: today's winds (via the Worker), and fresh clouds every hour for a page left open ----
 async function loadWind() {
@@ -1315,11 +1295,11 @@ async function loadWind() {
     if (!windK.value) fading.push(windK);
   } catch { /* no wind: the clouds just hold still */ }
 }
-if (FLIGHTS_URL) loadWind();
+loadWind();
 setInterval(() => {
   const old = cloudU.value;
   loadTex(CLOUDS, false, cloudU, cloudK, () => old?.dispose());
-  if (FLIGHTS_URL) loadWind();
+  loadWind();
 }, 36e5);
 // routes come from adsbdb through the Worker; a route only counts if the plane is plausibly on it right now
 const routes = new Map();                            // callsign -> pending promise, then route | null
@@ -1375,7 +1355,7 @@ function arc(line, U, W) {                           // great circle from U to W
     pos.setXYZ(i, (U.x * a + W.x * b) * routeR, (U.y * a + W.y * b) * routeR, (U.z * a + W.z * b) * routeR);
   }
   pos.needsUpdate = true;
-  if (line.computeLineDistances && line.material.isLineDashedMaterial) line.computeLineDistances();
+  if (line.material.isLineDashedMaterial) line.computeLineDistances();
 }
 let liveTextAt = 0;
 function followLive(t, dt) {                         // dead-reckon the plane; the spotlight, icon and route follow it

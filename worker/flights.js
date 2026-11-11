@@ -126,9 +126,11 @@ const airport = a => a && Number.isFinite(a.lat) && Number.isFinite(a.lon)
 function cleanTrip(t) {
   return {
     on: t?.on === true, public: t?.public === true, place: str(t?.place, 60), until: date(t?.until),
-    flights: (Array.isArray(t?.flights) ? t.flights : []).slice(0, 8).map(f => ({
-      flight: str(f.flight, 8).toUpperCase(), cs: validCs(str(f.cs, 8).toUpperCase()) ? str(f.cs, 8).toUpperCase() : '',
-      date: date(f.date), airline: str(f.airline, 60), from: airport(f.from), to: airport(f.to) })).filter(f => f.cs),
+    flights: (Array.isArray(t?.flights) ? t.flights : []).slice(0, 8).map(f => {
+      const cs = str(f.cs, 8).toUpperCase();
+      return { flight: str(f.flight, 8).toUpperCase(), cs: validCs(cs) ? cs : '',
+               date: date(f.date), airline: str(f.airline, 60), from: airport(f.from), to: airport(f.to) };
+    }).filter(f => f.cs),
     updated: new Date().toISOString(),
   };
 }
@@ -201,7 +203,7 @@ export default {
       else if (path === '/route') body = await route(url.searchParams);
       else if (path === '/callsign') body = await byCallsign(url.searchParams);
       else if (path === '/vacation') {           // only what Mesba chose to make public
-        const t = env.VACATION ? JSON.parse((await env.VACATION.get('trip')) || '{}') : {};
+        const t = JSON.parse((await env.VACATION.get('trip')) || '{}');
         body = JSON.stringify(t.public ? { on: t.on, place: t.place, until: t.until, flights: t.flights } : { on: false, flights: [] });
       }
       else if (path === '/wind') body = await remember('wind', 6e5, () => wind(env));

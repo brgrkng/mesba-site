@@ -766,8 +766,6 @@ const earthMat = new THREE.ShaderMaterial({
       float shade = 1. - cl * .55;
       // sunlight reddens as the sun gets low: it has crossed more air on the way down
       vec3 col = alb * max(NdL, 0.) * 1.7 * through(NdL) * shade;
-      // terminator: warm scattered band where day meets night
-      col += exp(-NdL * NdL * 49.) * vec3(.8, .3, .08) * .12 * (.4 + land);
       // sun glint on water + bright subsolar spot. As the sun gets low its light crosses more air, so the glint fades and
       // reddens toward the terminator instead of switching off there (a hard on/off drew a sharp line across the ocean)
       vec3 H = normalize(L + V + 1e-5);
@@ -813,8 +811,7 @@ const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.012, 96, 48), new THREE
       float area = spotArea(N);
       float mlit = area * smoothstep(.1, -.15, NdL);
       // sunlit tops turn gold, then pink, toward the terminator: their light has crossed more air
-      vec3 col = vec3(.95) * (lit * 1.05 * through(NdL) + .01) + exp(-NdL * NdL * 49.) * vec3(.6, .25, .08) * .2
-               + vec3(.5, .55, .75) * mlit * .7;
+      vec3 col = vec3(.95) * (lit * 1.05 * through(NdL) + .01) + vec3(.5, .55, .75) * mlit * .7;
       // clear skies under the spotlight, so the country underneath shows
       gl_FragColor = vec4(haze(col, N, V, L), a * max(.15 + .85 * smoothstep(-.2, .2, dot(N, L)), mlit) * (1. - area * .8));
     }`
